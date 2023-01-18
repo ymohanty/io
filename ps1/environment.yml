@@ -1,0 +1,16 @@
+name: io_venv
+channels:
+  - defaults
+dependencies:
+  - python=3.7
+  - pandas=1.0.5
+  - numpy=1.19.1
+  - openpyxl=3.0.4
+  - xlrd=1.2.0
+  - pip=20.1.1
+  - scipy>=1.2.0
+  - sympy>=1.1.0
+  - patsy>=0.5.1
+  - pip:
+    - fuzzywuzzy==0.17.0
+    - cleanco==2.0.1
