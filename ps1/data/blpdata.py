@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from . import ALL_DATA_PATHS
 
 
 class Data:
@@ -178,3 +177,4 @@ class Data:
 
 if __name__ == '__main__':
     pass
+
