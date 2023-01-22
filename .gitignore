@@ -87,8 +87,6 @@ ipython_config.py
 # Mac misc
 .DS_Store
 
-# Data
-ps1_ex*.csv
 
 # pipenv
 #   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
