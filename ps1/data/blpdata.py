@@ -5,7 +5,7 @@ from . import ALL_DATA_PATHS
 
 class Data:
 
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, spec="micro"):
         """
 
         :param filename:
@@ -13,11 +13,12 @@ class Data:
         ## Read data
         self.raw_data = pd.read_csv(filename)
         self.agg_data = None
+        self.micro_data = None
 
         ## Declare attributes
 
         # Metadata
-        self.spec = " "  # Specification used
+        self.spec = spec  # Specification used
         self.dims = {}  #
         self.num_rc = None
         self.model_vars = {}
@@ -34,7 +35,7 @@ class Data:
 
         ## Initialize instance
 
-        # Get the specification
+        # Get the specification details
         self.get_specification()
 
         # Get metadata
@@ -43,15 +44,14 @@ class Data:
         # Get data matrices
         self.get_data_matrices()
 
-    def get_specification(self, spec="blp"):
+    def get_specification(self):
         """
 
         :param spec:
         """
-        self.spec = spec
 
         # The BLP routine from ps1_ex4.csv
-        if spec == "blp":
+        if self.spec == "blp":
             self.agg_data = self.raw_data
             self.model_vars = {"i":None,"c": None, "t": "market", "j": "choice", "x_1": ["p", "x"], "x_2": [],
                                "x_3": ["p", "x"],
@@ -59,15 +59,19 @@ class Data:
                                }
 
         # The logit routine for ps1_ex3.csv
-        elif spec == "logit":
+        elif self.spec == "logit":
             self.agg_data = self.raw_data
             self.model_vars = {"i":None,"c": None, "t": "Market", "j": "Product", "x_1": ["Prices", "x"], "x_2": [],
                                "x_3": [],
                                "d": [], "s": "Shares", "z": ["z"]
                                }
         # The micro data logit routine ps1_ex2.csv
-        elif spec == "micro":
-            pass
+        elif self.spec == "micro":
+            self.model_vars = {"i":"i","c": "choices", "t": None, "j": "j", "x_1": ["x.1", "x.2", "x.3"], "x_2":["x.1", "x.2", "x.3"],
+                               "x_3": [],
+                               "d": ["d.1","d.2"], "s": "s", "z": []
+                               }
+            self.agg_data, self.micro_data = self.get_working_data()
 
         # Throw exception here if specification
         # not recognized
@@ -79,7 +83,10 @@ class Data:
 
         """
         # Counts for index variables
-        self.dims["T"] = len(self.agg_data[self.model_vars["t"]].unique())
+        try:
+            self.dims["T"] = len(self.agg_data[self.model_vars["t"]].unique())
+        except KeyError:
+            self.dims["T"] = 1
         self.dims["J"] = len(self.agg_data[self.model_vars["j"]].unique())
 
         # Household and product characteristics
@@ -130,6 +137,10 @@ class Data:
         return None
 
     def get_observed_market_share(self):
+        """
+
+        :return:
+        """
         data = self.agg_data[self.model_vars["s"]].to_numpy()
         s = np.reshape(data, (self.dims["T"], self.dims["J"]))
 
@@ -141,7 +152,29 @@ class Data:
 
         return s
 
+    def get_working_data(self):
+        """
+
+        """
+        if self.spec != "micro":
+            raise Exception(f"No microdata for {self.spec} specifications so we cannot aggregate!")
+
+        # Aggregate raw data into market level data to recover shares and characteristics
+        agg_data = self.raw_data.groupby("choice").mean()
+        agg_data = agg_data[self.model_vars["x_1"]]
+        observed_market_shares = self.raw_data.groupby("choice").size()/len(self.raw_data.index)
+        agg_data["s"] = pd.Series(observed_market_shares)
+        agg_data.reset_index(inplace=True)
+        agg_data = agg_data.rename(columns={"choice":"j"})
+
+        # Collect micro data separately
+        indiv_indices = pd.Series(data=list(range(len(self.raw_data.index))),
+                                  name=self.model_vars["i"])
+        indiv_chars = self.raw_data[self.model_vars["d"]]
+        micro_data = pd.concat([indiv_indices,indiv_chars], axis = 1)
+
+        # Return aggregate and microdata
+        return agg_data, micro_data
 
 if __name__ == '__main__':
-    dat = Data(ALL_DATA_PATHS[0])
-    print(dat.s.max())
+    pass
