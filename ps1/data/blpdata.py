@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from . import ALL_DATA_PATHS
 
 
 class Data:
@@ -143,5 +142,6 @@ class Data:
 
 
 if __name__ == '__main__':
-    dat = Data(ALL_DATA_PATHS[0])
-    print(dat.s.max())
+    dat = Data("/Users/brian/Dropbox/Mac/Desktop/io/ps1/data/ps1_ex4.csv")
+    x = dat.get_observed_market_share()
+    print(x.shape)

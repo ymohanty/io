@@ -43,3 +43,7 @@ class blpmodel:
         
         # Initialize the beta 
         self.estimopts.beta_init()
+
+    # Method to draw random shocks - not sure this is correct
+    def drawrandomshocks(self):
+        self.nu = np.reshape(np.random.standard_normal(self.num_rc * self.estimopts.S), (self.num_rc, self.estimopts.S))
