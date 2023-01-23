@@ -60,7 +60,7 @@ class Data:
         # The logit routine for ps1_ex3.csv
         elif self.spec == "logit":
             self.agg_data = self.raw_data
-            self.model_vars = {"i":None,"c": None, "t": "Market", "j": "Product", "x_1": ["Prices", "x"], "x_2": [],
+            self.model_vars = {"i":None,"c": None, "t": "market", "j": "Product", "x_1": ["Prices", "x"], "x_2": [],
                                "x_3": [],
                                "d": [], "s": "Shares", "z": ["z"]
                                }
@@ -85,6 +85,7 @@ class Data:
         try:
             self.dims["T"] = len(self.agg_data[self.model_vars["t"]].unique())
         except KeyError:
+            print("Micro data found: setting number of markets to 1...")
             self.dims["T"] = 1
         self.dims["J"] = len(self.agg_data[self.model_vars["j"]].unique())
 
