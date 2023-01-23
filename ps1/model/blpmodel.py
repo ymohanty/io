@@ -1,49 +1,95 @@
 import numpy as np
+import pandas as pd
 
-class blpmodel:
-    
+
+class Model:
+
     # Set up an instance of this class
-    def __init__(self, data, modeltype, estimatortype):
-        # Get data
+    def __init__(self, data, estimatortype, estimopts={}):
+        """
+
+        :param data:
+        :param estimatortype:
+        :param estimopts:
+        """
+        # Assign data object
         self.data = data
-        
-        # Get modeltype
-        self.modeltype = modeltype
-        
-        # Get estimatortype
+
+        # Get modeltype (one of "blp","logit","micro")
+        self.modeltype = self.data.spec
+
+        # Get estimatortype ("mle","gmm")
         self.estimatortype = estimatortype
-        
-        # Get estimopts
-        self.setEstimOpts()
-        
-    def setEstimOpts(self):
-        # Price sd is estimated normally in first stage
-        self.estimopts.pricesd = "normal"
-        self.estimopts.price_distr = "normal"
-        
-        # Monte carlo integration
-        self.estimopts.integral_method = "monte_carlo"   
 
-        # Set the number of simulations
-        self.estimopts.S = 100
-        
-        # Tolerance for contraction
-        self.estimopts.delta_tol = 1e-12
-        self.estimopts.delta_max_iter = 1000
-        
-        # Tolerance for numerical Jacobian calculation
-        self.estimopts.jac_tol = 1e-8
-        
-        # Initial vectors of mean indirect utilities 
-        self.estimopts.delta_init = np.zeros((self.data.dims.J, self.data.dims.T))
-        self.estimopts.delta.init(np.isnan(self.data.s_jt)) = np.nan
-        
-        # Seed for simulation
-        self.estimopts.stream = np.random.seed("mt19937ar")
-        
-        # Initialize the beta 
-        self.estimopts.beta_init()
+        # Get estimator options
+        if estimopts == {}:
+            self.estimopts = self.get_estim_opts()
+        else:
+            self.estimopts = estimopts
 
-    # Method to draw random shocks - not sure this is correct
-    def drawrandomshocks(self):
-        self.nu = np.reshape(np.random.standard_normal(self.num_rc * self.estimopts.S), (self.num_rc, self.estimopts.S))
+        # Random taste shocks
+        self.nu = self.draw_random_shocks()
+
+        # Initialize all parameter estimates
+        self.beta = []
+        self.beta_bar_hat = []
+        self.beta_o_hat = []
+        self.beta_u_hat = []
+        self.delta = []
+        self.init_parameter_estimates()
+
+    def get_estim_opts(self):
+        """
+
+        :return:
+        """
+
+        estimopts = {
+            'stream': np.random.default_rng(2023),
+            'num_sim': 100,
+            'delta_tol': 1e-12,
+            'delta_max_iter': 1000,
+            'jac_tol': 1e-8,
+        }
+
+        return estimopts
+
+    def init_parameter_estimates(self):
+        """
+
+        """
+
+        # Linear parameters
+        self.beta_bar_hat = self.estimopts['stream'].uniform(-1, 1, self.data.dims["K_1"])
+
+        # Parameters on interactions of observed household chararacteristics and product characteristics
+        self.beta_o_hat = self.estimopts['stream'].uniform(-1, 1, (self.data.dims["D"], self.data.dims["K_2"]))
+
+        # Random coefficients
+        self.beta_u_hat = np.tril(self.estimopts['stream'].uniform(-1, 1, (self.data.dims["K_3"], self.data.dims["K_3"])))
+
+        # Full parameter vector
+        self.beta = np.concatenate((self.beta_bar, self.beta_o.flatten(), self.beta_u.flatten()))
+        self.beta = self.beta[self.beta != 0]
+
+        # Mean indirect utility
+        self.delta = np.zeros((self.data.dims["T"], self.data.dims["J"]))
+
+    def draw_random_shocks(self):
+        """
+
+        """
+        return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
+
+    def get_model_market_shares(self, delta, beta_o, beta_u):
+        pass
+
+    def get_delta(self, beta_o, beta_u, methods):
+        pass
+
+    def get_moments(self,delta, beta_o, beta_u):
+        pass
+
+    def objective(self, beta_o, beta_u):
+        pass
+
