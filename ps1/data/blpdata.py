@@ -66,7 +66,7 @@ class Data:
                                }
         # The micro data logit routine ps1_ex2.csv
         elif self.spec == "micro":
-            self.model_vars = {"i":"i","c": "choices", "t": None, "j": "j", "x_1": ["x.1", "x.2", "x.3"], "x_2":["x.1", "x.2", "x.3"],
+            self.model_vars = {"i":"i","c": "choice", "t": None, "j": "j", "x_1": ["x.1", "x.2", "x.3"], "x_2":["x.1", "x.2", "x.3"],
                                "x_3": [],
                                "d": ["d.1","d.2"], "s": "s", "z": []
                                }
@@ -171,7 +171,8 @@ class Data:
         indiv_indices = pd.Series(data=list(range(len(self.raw_data.index))),
                                   name=self.model_vars["i"])
         indiv_chars = self.raw_data[self.model_vars["d"]]
-        micro_data = pd.concat([indiv_indices,indiv_chars], axis = 1)
+        indiv_choices = self.raw_data[self.model_vars["c"]]
+        micro_data = pd.concat([indiv_indices,indiv_chars,indiv_choices], axis = 1)
 
         # Return aggregate and microdata
         return agg_data, micro_data

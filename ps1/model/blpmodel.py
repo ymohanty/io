@@ -38,6 +38,9 @@ class Model:
         self.delta = []
         self.init_parameter_estimates()
 
+        # initialize the elasticity matrix
+        self.elasticities = []
+
     def get_estim_opts(self):
         """
 
@@ -69,7 +72,7 @@ class Model:
         self.beta_u_hat = np.tril(self.estimopts['stream'].uniform(-1, 1, (self.data.dims["K_3"], self.data.dims["K_3"])))
 
         # Full parameter vector
-        self.beta = np.concatenate((self.beta_bar, self.beta_o.flatten(), self.beta_u.flatten()))
+        self.beta = np.concatenate((self.beta_bar_hat, self.beta_o_hat.flatten(), self.beta_u_hat.flatten()))
         self.beta = self.beta[self.beta != 0]
 
         # Mean indirect utility
@@ -90,6 +93,20 @@ class Model:
     def get_moments(self,delta, beta_o, beta_u):
         pass
 
+    def get_likelihood(self):
+        pass
+
     def objective(self, beta_o, beta_u):
         pass
+
+    def estimate(self):
+        pass
+
+    def print_esimates(self, filename):
+        pass
+
+    def print_elasticities(self, filename):
+        pass
+
+
 
