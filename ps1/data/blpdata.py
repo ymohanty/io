@@ -116,6 +116,9 @@ class Data:
         # Get observed market shares
         self.s = self.get_observed_market_share()
 
+        if self.add_outside_good:
+            self.dims["J"] = self.dims["J"]+1
+
     def get_product_char_matrix(self, vars):
         """
 

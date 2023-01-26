@@ -34,6 +34,7 @@ class Model:
         self.beta = []
         self.beta_bar_hat = []
         self.beta_o_hat = []
+        # beta_u_hat is gamma in the context of this problem set
         self.beta_u_hat = []
         self.delta = []
         self.init_parameter_estimates()
@@ -68,7 +69,7 @@ class Model:
         # Parameters on interactions of observed household chararacteristics and product characteristics
         self.beta_o_hat = self.estimopts['stream'].uniform(-1, 1, (self.data.dims["D"], self.data.dims["K_2"]))
 
-        # Random coefficients
+        # Random coefficients (gamma)
         self.beta_u_hat = np.tril(self.estimopts['stream'].uniform(-1, 1, (self.data.dims["K_3"], self.data.dims["K_3"])))
 
         # Full parameter vector
@@ -84,8 +85,29 @@ class Model:
         """
         return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
 
-    def get_model_market_shares(self, delta, beta_o, beta_u):
-        pass
+    def get_model_market_shares(self, delta, beta_o=None, beta_u=None):
+        # First reshape delta to be T x J x S
+        delta_reshape = np.resize(self.delta, (self.data.dims['T'], self.data.dims['J'], self.estimopts['num_sim']))
+
+        # Get second term: x * Gamma * nu
+        x3_betauhat = np.matmul(self.data.x_3, self.beta_u_hat)
+        x3_betauhat_nu = np.matmul(x3_betauhat, self.nu)
+
+        # Indirect conditional utility
+        indirect_cond_util = delta_reshape + x3_betauhat_nu  # T x J x S
+
+        # Find numerator and denominator
+        numer = np.exp(indirect_cond_util)
+        denom = np.nansum(np.exp(indirect_cond_util[:, 1:self.data.dims['J']]), 1, keepdims=True)
+        denom = np.repeat(denom, self.data.dims['J'], 1)
+
+        # Divide to get a T x J x S matrix
+        cond_choice = numer/(1 + denom)
+
+        # Take the mean over all S simulations
+        cond_choice_mean = np.nanmean(cond_choice, 2)
+
+        return cond_choice_mean
 
     def get_delta(self, beta_o, beta_u, methods):
         pass
