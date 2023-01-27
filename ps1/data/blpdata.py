@@ -4,7 +4,7 @@ import numpy as np
 
 class Data:
 
-    def __init__(self, filename: str, spec="micro"):
+    def __init__(self, filename: str, spec="micro", add_outside_good=True):
         """
 
         :param filename:
@@ -17,20 +17,20 @@ class Data:
         ## Declare attributes
 
         # Metadata
-        self.spec = spec  # Specification used
-        self.dims = {}  #
-        self.num_rc = None
+        self.spec = spec                 # Specification used
+        self.dims = {}                   # Data dimensions
+        self.num_rc = None               # Num. random coefficients
         self.model_vars = {}
-        self.add_outside_good = True
+        self.add_outside_good = add_outside_good
 
         # Data matrices
-        self.choice = None
-        self.d_it = None
-        self.x_1 = None
-        self.x_2 = None
-        self.x_3 = None
-        self.z = None
-        self.s = None
+        self.choice = None               # I x 1 (Indiv. choices)
+        self.d = None                    # I x D (Indiv. char)
+        self.x_1 = None                  # T x J x K_1 (Chars that go into mean utility)
+        self.x_2 = None                  # T x J x K_2 (Chars that interact with observed hh. chars)
+        self.x_3 = None                  # T x J x K_3 (Chars with unobserved taste variation)
+        self.z = None                    # T x J x Z (instruments)
+        self.s = None                    # T x J (observed market shares)
 
         ## Initialize instance
 
@@ -137,7 +137,15 @@ class Data:
         return data
 
     def get_household_char_matrix(self):
-        return None
+        """
+
+        """
+        if self.spec == "micro":
+            return self.micro_data[self.model_vars['d']]
+        else:
+            return np.zeros((1,0))
+
+
 
     def get_observed_market_share(self):
         """
