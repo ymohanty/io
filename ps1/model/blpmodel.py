@@ -50,7 +50,6 @@ class Model:
         :return:
         """
         delta_init = np.random.randn(self.data.dims["T"], self.data.dims["J"])
-        delta_init[0] = 0
         estimopts = {
             'stream': np.random.default_rng(2023),
             'num_sim': 50,
@@ -98,43 +97,38 @@ class Model:
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
         :return: cond_choice_mean (T x J) matrix of predicted market shares for each good j in market t
         """
-        # Exclude outside good
-        assert(delta.shape[1] == self.data.dims['J']-1)
 
-        if self.modeltype == "blp":
-            # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
-            delta = np.resize(delta, (self.data.dims['T'], self.data.dims['J']-1, self.estimopts['num_sim']))
 
-            # Observed individual taste variation
-            d_beta_o = np.matmul(self.data.d, beta_o)
-            d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
+        # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
+        delta = np.reshape(np.repeat(delta, self.estimopts['num_sim']),
+                           (self.data.dims['T'],self.data.dims['J'], self.estimopts['num_sim']))
 
-            # Unobserved individual taste variation
-            x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
-            x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
+        # Observed individual taste variation
+        d_beta_o = np.matmul(self.data.d, beta_o)
+        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
 
-            # Deviation from mean indirect utility
-            mu = x3_beta_u_hat_nu
+        # Unobserved individual taste variation
+        x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
+        x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
 
-            # Indirect conditional utility
-            indirect_cond_util = delta + mu  # T x J x S
-        else:
-            indirect_cond_util = delta
+        # Deviation from mean indirect utility
+        mu = x3_beta_u_hat_nu + d_beta_o_x
+
+        # Indirect conditional utility
+        indirect_cond_util = delta   # T x J x S
 
         # Find numerator and denominator
         numer = np.exp(indirect_cond_util)
         denom = np.nansum(numer, 1, keepdims=True)
-        denom = np.repeat(denom, self.data.dims['J']-1, axis=1)
+        denom = np.repeat(denom, self.data.dims['J'], axis=1)
         np.testing.assert_array_less(numer,denom)
 
         # Divide to get a T x J x S matrix
         cond_choice = numer /  (1+ denom)
-        #print(np.amin(np.sum(cond_choice,axis=1) - 1))
-        #print(np.max(np.sum(cond_choice,axis=1)-1))
+        #print(cond_choice.shape)
 
         # Take the mean over all S simulations
-        if self.modeltype == "blp":
-            cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
+        cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
 
         return cond_choice
 
@@ -142,7 +136,7 @@ class Model:
 
         diff = np.inf
         niter = 1
-        delta = self.estimopts['delta_init'][:,1:self.data.dims['J']]
+        delta = self.estimopts['delta_init']
         while diff > self.estimopts['delta_tol'] and niter < self.estimopts['delta_max_iter']:
             #print(f"Iter: {niter}")
             old_delta = delta
@@ -151,11 +145,10 @@ class Model:
             niter += 1
 
         print(f"Converged with diff: {diff} and iterations: {niter}")
-        print(delta[2,2])
         return delta
 
     def contraction_map(self, delta, beta_o, beta_u):
-        return delta + np.log(self.data.s[:,1:self.data.dims['J']]) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
+        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
 
     def get_moments(self, delta, beta_o, beta_u):
         pass
