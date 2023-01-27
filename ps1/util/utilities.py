@@ -15,4 +15,7 @@ def get_lower_triangular(array):
         a[0,:i+1] = array[int(i * (i + 1) / 2):int((i + 1) * (i + 2) / 2)]
         arr.append(a)
 
-    return np.concatenate(tuple(arr), axis=0)
+    if len(arr) == 0:
+        return np.zeros((0,0))
+    else:
+        return np.concatenate(tuple(arr), axis=0)

@@ -192,29 +192,45 @@ class Model:
         # No need to do two-step since
         # we are not reporting std. errors
         if self.modeltype == "blp":
-
-            # GMM
-            print("Estimating non-linear parameters...")
-            beta_tilde_init = self.beta[self.data.dims['K_1']:]
-            res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init, method='Nelder-Mead')
-            self.beta_o_hat = np.reshape(res.x[:self.data.dims['D']*self.data.dims['K_2']],(self.data.dims['D'],self.data.dims['K_2']))
-            self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D']*self.data.dims['K_2']:])
-            print(f"The estimates of the coefficients on observed chars = {self.beta_o_hat}")
-            print(f"The estimates of random coefficients = {self.beta_u_hat}")
-
-            # 2SLS
-            print("Estimating linear parameters...")
-            self.delta = np.reshape(self.get_delta(self.beta_o_hat,self.beta_u_hat), (self.data.dims['T']*self.data.dims['J'],1))
-            X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
-            Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
-            self.beta_bar_hat = iv_2sls(X, Z, self.delta)
-            print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
-
+            self.estimate_blp()
 
         elif self.modeltype == "logit":
-            pass
+            if self.estimatortype=="gmm":
+                self.estimate_blp()
+            elif self.estimatortype=="2sls":
+                outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
+                share_by_outside_good = self.data.s / outside_share
+                share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
+                log_shares_outside = np.log(share_by_outside_good_long)
+                X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+                Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+                self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside)
+                print(f"The estimates (logit) = {self.beta_bar_hat}")
         else:
             pass
+
+    def estimate_blp(self):
+
+        # GMM
+        print("Estimating non-linear parameters...")
+        beta_tilde_init = self.beta[self.data.dims['K_1']:]
+        res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init,
+                       method='Nelder-Mead')
+        self.beta_o_hat = np.reshape(res.x[:self.data.dims['D'] * self.data.dims['K_2']],
+                                     (self.data.dims['D'], self.data.dims['K_2']))
+        self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D'] * self.data.dims['K_2']:])
+        print(f"The estimates of the coefficients on observed chars = {self.beta_o_hat}")
+        print(f"The estimates of random coefficients = {self.beta_u_hat}")
+
+        # 2SLS
+        print("Estimating linear parameters...")
+        self.delta = np.reshape(self.get_delta(self.beta_o_hat, self.beta_u_hat),
+                                (self.data.dims['T'] * self.data.dims['J'], 1))
+        X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+        Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+        self.beta_bar_hat = iv_2sls(X, Z, self.delta)
+        print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
+
 
     def compute_elasticities(self):
         pass
