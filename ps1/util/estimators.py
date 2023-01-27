@@ -1,7 +1,7 @@
 import numpy as np
 
 # Function to compute 2SLS estimator
-def tsls_estimator(X, Z, Y):
+def iv_2sls(X, Z, Y):
     # Make transposes
     XT = np.transpose(X)
     ZT = np.transpose(Z)

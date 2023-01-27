@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+from util.estimators import iv_2sls
+from util.utilities import get_lower_triangular
+from scipy.optimize import minimize
 
 
 # from util import
@@ -68,13 +71,16 @@ class Model:
 
         # Linear parameters
         self.beta_bar_hat = self.estimopts['stream'].uniform(-1, 1, self.data.dims["K_1"])
+        #print(self.beta_bar_hat)
 
         # Parameters on interactions of observed household chararacteristics and product characteristics
         self.beta_o_hat = self.estimopts['stream'].uniform(-1, 1, (self.data.dims["D"], self.data.dims["K_2"]))
+        #print(self.beta_o_hat)
 
         # Random coefficients (gamma)
         self.beta_u_hat = np.tril(
             self.estimopts['stream'].uniform(-0.05, 0.05, (self.data.dims["K_3"], self.data.dims["K_3"])))
+        #print(self.beta_u_hat)
 
         # Full parameter vector
         self.beta = np.concatenate((self.beta_bar_hat, self.beta_o_hat.flatten(), self.beta_u_hat.flatten()))
@@ -132,7 +138,7 @@ class Model:
 
         return cond_choice
 
-    def get_delta(self, beta_o, beta_u, noisy=True):
+    def get_delta(self, beta_o, beta_u, noisy=False):
 
         diff = np.inf
         niter = 1
@@ -153,33 +159,52 @@ class Model:
     def contraction_map(self, delta, beta_o, beta_u):
         return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
 
-    def get_moments(self, beta_o, beta_u):
+    def get_moments(self, beta_o, beta_u, W):
 
-        delta = self.get_delta(beta_o, beta_u)
+        # Recover linear parameters as a function of non-linear parameters via 2SLS
+        delta = np.reshape(self.get_delta(beta_o, beta_u), (self.data.dims['T']*self.data.dims['J'],1))
+        X = np.reshape(self.data.x_1,(self.data.dims['T']*self.data.dims['J'],self.data.dims['K_1']))
+        Z = np.reshape(self.data.z,(self.data.dims['T']*self.data.dims['J'],self.data.dims['Z']))
+        beta_bar = iv_2sls(X,Z,delta)
 
+        # Unobserved quality as a function of parameters
+        xi = delta - X @ beta_bar
 
+        # Quadratic form of xi and z
+        G_hat = (np.transpose(xi) @ Z)
+        Q = G_hat @ W @ np.transpose(G_hat)
 
+        return Q.flatten()[0]
 
-    def get_likelihood(self):
+    def get_likelihood(self, beta_bar, beta_o):
         pass
 
     # Should we also pass a weighting matrix?
-    def objective(self, beta_o, beta_u):
-        # Get delta estimate
-        delta = self.get_delta(beta_o, beta_u)
+    def blp_objective(self, beta_tilde, W):
 
-        # Get the moments
-        G = self.get_moments(delta, beta_o, beta_u)
-
-        G[np.where(np.isnan(G))] = 0
-        mean_G = np.mean(G, 2)
-        val_int = np.matmul(np.transpose(mean_G), W)
-        val = np.matmul(val_int, mean_G)    # Value of objective
-
-        # Inverse of covariance matrix
-        inv_cov = np.linalg.inv(np.cov(np.transpose(G)))
+        # Break up parameter vector
+        beta_o = np.reshape(beta_tilde[:self.data.dims['D']*self.data.dims['K_2']],(self.data.dims['D'],self.data.dims['K_2']))
+        beta_u = get_lower_triangular(beta_tilde[self.data.dims['D']*self.data.dims['K_2']:])
+        return self.get_moments(beta_o, beta_u, W)
 
     def estimate(self):
+
+        # No need to do two-step since
+        # we are not reporting std. errors
+        if self.modeltype == "blp":
+
+            # GMM
+            beta_tilde_init = self.beta[self.data.dims['K_1']:]
+            res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init, method='Nelder-Mead')
+            print(res)
+
+            # 2SLS
+        elif self.modeltype == "logit":
+            pass
+        else:
+            pass
+
+    def compute_elasticities(self):
         pass
 
     def print_esimates(self, filename):
