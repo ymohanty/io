@@ -97,39 +97,41 @@ class Model:
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
         :return: cond_choice_mean (T x J) matrix of predicted market shares for each good j in market t
         """
-        # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
-        delta = np.resize(delta, (self.data.dims['T'], self.data.dims['J'], self.estimopts['num_sim']))
 
-        # Observed individual taste variation
-        d_beta_o = np.matmul(self.data.d, beta_o)
-        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
+        if self.modeltype == "blp":
+            # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
+            delta = np.resize(delta, (self.data.dims['T'], self.data.dims['J'], self.estimopts['num_sim']))
 
-        # Unobserved individual taste variation
-        x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
-        x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
+            # Observed individual taste variation
+            d_beta_o = np.matmul(self.data.d, beta_o)
+            d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
 
-        # Deviation from mean indirect utility
-        mu = d_beta_o_x + x3_beta_u_hat_nu
+            # Unobserved individual taste variation
+            x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
+            x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
 
-        # Indirect conditional utility
-        indirect_cond_util = delta + mu  # T x J x S
+            # Deviation from mean indirect utility
+            mu = d_beta_o_x + x3_beta_u_hat_nu
+
+            # Indirect conditional utility
+            indirect_cond_util = delta + mu  # T x J x S
+        else:
+            indirect_cond_util = delta
 
         # Find numerator and denominator
         numer = np.exp(indirect_cond_util)
-        print(np.amax(numer))
-        print(np.amin(numer))
         denom = np.nansum(np.exp(indirect_cond_util[:, 1:self.data.dims['J']]), 1, keepdims=True)
         denom = np.repeat(denom, self.data.dims['J'], 1)
-        print(denom.shape)
         np.testing.assert_array_less(numer,1+denom)
 
         # Divide to get a T x J x S matrix
         cond_choice = numer / (1 + denom)
 
         # Take the mean over all S simulations
-        cond_choice_mean = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
+        if self.modeltype == "blp":
+            cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
 
-        return cond_choice_mean
+        return cond_choice
 
     def get_delta(self, beta_o, beta_u):
 
@@ -140,9 +142,9 @@ class Model:
             old_delta = delta
             delta = self.contraction_map(old_delta, beta_o, beta_u)
             diff = np.max(abs(delta - old_delta))
-            #print(diff)
             niter += 1
 
+        print(f"Converged with diff: {diff} and iterations: {niter}")
         return delta
 
     def contraction_map(self, delta, beta_o, beta_u):
@@ -157,7 +159,7 @@ class Model:
     # Should we also pass a weighting matrix?
     def objective(self, beta_o, beta_u):
         # Get delta estimate
-        delta = self.get_delta(beta_o, beta_u, "direct")
+        delta = self.get_delta(beta_o, beta_u)
 
         # Get the moments
         G = self.get_moments(delta, beta_o, beta_u)
