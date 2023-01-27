@@ -116,6 +116,9 @@ class Data:
         # Get observed market shares
         self.s = self.get_observed_market_share()
 
+        # Get instruments
+        self.z = self.get_instruments()
+
         if self.add_outside_good:
             self.dims["J"] = self.dims["J"]+1
 
@@ -144,6 +147,11 @@ class Data:
             return self.micro_data[self.model_vars['d']]
         else:
             return np.zeros((1,0))
+
+
+    def get_instruments(self):
+        return np.reshape(self.agg_data[self.model_vars['z']].to_numpy(),
+                          (self.dims["T"], self.dims["J"], self.dims['Z']))
 
 
 

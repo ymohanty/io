@@ -52,7 +52,7 @@ class Model:
         delta_init = np.random.randn(self.data.dims["T"], self.data.dims["J"])
         estimopts = {
             'stream': np.random.default_rng(2023),
-            'num_sim': 50,
+            'num_sim': 150,
             'delta_tol': 1e-12,
             'delta_max_iter': 100000,
             'jac_tol': 1e-8,
@@ -95,7 +95,7 @@ class Model:
         :param delta: (T x J) matrix of mean indirect utilities by product and market
         :param beta_o: (D x K_2) matrix of coefficients on household/individual characteristics
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
-        :return: cond_choice_mean (T x J) matrix of predicted market shares for each good j in market t
+        :return cond_choice : (T x J) matrix of predicted market shares for each good j in market t
         """
 
 
@@ -115,7 +115,7 @@ class Model:
         mu = x3_beta_u_hat_nu + d_beta_o_x
 
         # Indirect conditional utility
-        indirect_cond_util = delta   # T x J x S
+        indirect_cond_util = delta + mu  # T x J x S
 
         # Find numerator and denominator
         numer = np.exp(indirect_cond_util)
@@ -132,7 +132,7 @@ class Model:
 
         return cond_choice
 
-    def get_delta(self, beta_o, beta_u):
+    def get_delta(self, beta_o, beta_u, noisy=True):
 
         diff = np.inf
         niter = 1
@@ -144,14 +144,21 @@ class Model:
             diff = np.amax(abs(delta - old_delta))
             niter += 1
 
-        print(f"Converged with diff: {diff} and iterations: {niter}")
+        if noisy:
+            print(f"Converged with diff: {diff} and iterations: {niter}")
+            print(delta[2,3])
+
         return delta
 
     def contraction_map(self, delta, beta_o, beta_u):
         return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
 
-    def get_moments(self, delta, beta_o, beta_u):
-        pass
+    def get_moments(self, beta_o, beta_u):
+
+        delta = self.get_delta(beta_o, beta_u)
+
+
+
 
     def get_likelihood(self):
         pass
