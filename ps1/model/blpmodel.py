@@ -49,14 +49,15 @@ class Model:
 
         :return:
         """
-
+        delta_init = np.random.randn(self.data.dims["T"], self.data.dims["J"])
+        delta_init[0] = 0
         estimopts = {
             'stream': np.random.default_rng(2023),
-            'num_sim': 100,
+            'num_sim': 50,
             'delta_tol': 1e-12,
-            'delta_max_iter': 1000,
+            'delta_max_iter': 100000,
             'jac_tol': 1e-8,
-            'delta_init': np.zeros((self.data.dims['T'], self.data.dims['J']))
+            'delta_init': delta_init
         }
 
         return estimopts
@@ -74,14 +75,14 @@ class Model:
 
         # Random coefficients (gamma)
         self.beta_u_hat = np.tril(
-            self.estimopts['stream'].uniform(-1, 1, (self.data.dims["K_3"], self.data.dims["K_3"])))
+            self.estimopts['stream'].uniform(-0.05, 0.05, (self.data.dims["K_3"], self.data.dims["K_3"])))
 
         # Full parameter vector
         self.beta = np.concatenate((self.beta_bar_hat, self.beta_o_hat.flatten(), self.beta_u_hat.flatten()))
         self.beta = self.beta[self.beta != 0]
 
         # Mean indirect utility
-        self.delta = np.zeros((self.data.dims["T"], self.data.dims["J"]))
+        self.delta = self.estimopts['delta_init']
 
     def draw_random_shocks(self):
         """
@@ -97,10 +98,12 @@ class Model:
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
         :return: cond_choice_mean (T x J) matrix of predicted market shares for each good j in market t
         """
+        # Exclude outside good
+        assert(delta.shape[1] == self.data.dims['J']-1)
 
         if self.modeltype == "blp":
             # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
-            delta = np.resize(delta, (self.data.dims['T'], self.data.dims['J'], self.estimopts['num_sim']))
+            delta = np.resize(delta, (self.data.dims['T'], self.data.dims['J']-1, self.estimopts['num_sim']))
 
             # Observed individual taste variation
             d_beta_o = np.matmul(self.data.d, beta_o)
@@ -111,7 +114,7 @@ class Model:
             x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
 
             # Deviation from mean indirect utility
-            mu = d_beta_o_x + x3_beta_u_hat_nu
+            mu = x3_beta_u_hat_nu
 
             # Indirect conditional utility
             indirect_cond_util = delta + mu  # T x J x S
@@ -120,12 +123,14 @@ class Model:
 
         # Find numerator and denominator
         numer = np.exp(indirect_cond_util)
-        denom = np.nansum(np.exp(indirect_cond_util[:, 1:self.data.dims['J']]), 1, keepdims=True)
-        denom = np.repeat(denom, self.data.dims['J'], 1)
-        np.testing.assert_array_less(numer,1+denom)
+        denom = np.nansum(numer, 1, keepdims=True)
+        denom = np.repeat(denom, self.data.dims['J']-1, axis=1)
+        np.testing.assert_array_less(numer,denom)
 
         # Divide to get a T x J x S matrix
-        cond_choice = numer / (1 + denom)
+        cond_choice = numer /  (1+ denom)
+        #print(np.amin(np.sum(cond_choice,axis=1) - 1))
+        #print(np.max(np.sum(cond_choice,axis=1)-1))
 
         # Take the mean over all S simulations
         if self.modeltype == "blp":
@@ -137,18 +142,20 @@ class Model:
 
         diff = np.inf
         niter = 1
-        delta = self.estimopts['delta_init']
+        delta = self.estimopts['delta_init'][:,1:self.data.dims['J']]
         while diff > self.estimopts['delta_tol'] and niter < self.estimopts['delta_max_iter']:
+            #print(f"Iter: {niter}")
             old_delta = delta
-            delta = self.contraction_map(old_delta, beta_o, beta_u)
-            diff = np.max(abs(delta - old_delta))
+            delta = self.contraction_map(delta, beta_o, beta_u)
+            diff = np.amax(abs(delta - old_delta))
             niter += 1
 
         print(f"Converged with diff: {diff} and iterations: {niter}")
+        print(delta[2,2])
         return delta
 
     def contraction_map(self, delta, beta_o, beta_u):
-        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
+        return delta + np.log(self.data.s[:,1:self.data.dims['J']]) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
 
     def get_moments(self, delta, beta_o, beta_u):
         pass
