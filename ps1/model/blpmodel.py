@@ -96,8 +96,21 @@ class Model:
     def get_likelihood(self):
         pass
 
+    # Should we also pass a weighting matrix?
     def objective(self, beta_o, beta_u):
-        pass
+        # Get delta estimate
+        delta = self.get_delta(beta_o, beta_u, "direct")
+
+        # Get the moments
+        G = self.get_moments(delta, beta_o, beta_u)
+
+        G[np.where(np.isnan(G))] = 0
+        mean_G = np.mean(G, 2)
+        val_int = np.matmul(np.transpose(mean_G), W)
+        val = np.matmul(val_int, mean_G)    # Value of objective
+
+        # Inverse of covariance matrix
+        inv_cov = np.linalg.inv(np.cov(np.transpose(G)))
 
     def estimate(self):
         pass
