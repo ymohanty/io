@@ -194,11 +194,23 @@ class Model:
         if self.modeltype == "blp":
 
             # GMM
+            print("Estimating non-linear parameters...")
             beta_tilde_init = self.beta[self.data.dims['K_1']:]
             res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init, method='Nelder-Mead')
-            print(res)
+            self.beta_o_hat = np.reshape(res.x[:self.data.dims['D']*self.data.dims['K_2']],(self.data.dims['D'],self.data.dims['K_2']))
+            self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D']*self.data.dims['K_2']:])
+            print(f"The estimates of the coefficients on observed chars = {self.beta_o_hat}")
+            print(f"The estimates of random coefficients = {self.beta_u_hat}")
 
             # 2SLS
+            print("Estimating linear parameters...")
+            self.delta = np.reshape(self.get_delta(self.beta_o_hat,self.beta_u_hat), (self.data.dims['T']*self.data.dims['J'],1))
+            X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+            Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+            self.beta_bar_hat = iv_2sls(X, Z, self.delta)
+            print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
+
+
         elif self.modeltype == "logit":
             pass
         else:
