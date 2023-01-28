@@ -11,9 +11,10 @@ def main(args):
     # Load BLP data into data class
     dataobj = blpdata.Data(data.BLP_DATA_LOC,spec="blp",add_outside_good=False)
     modelobj = blpmodel.Model(dataobj,"gmm")
-    I = np.eye(dataobj.dims['Z'])
+    #I = np.eye(dataobj.dims['Z'])
     modelobj.estimate()
-
+    test = modelobj.compute_elasticities()
+    print(np.tril(test))
 
 if __name__ == '__main__':
     main(sys.argv)
