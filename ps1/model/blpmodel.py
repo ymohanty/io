@@ -55,7 +55,7 @@ class Model:
         delta_init = np.random.randn(self.data.dims["T"], self.data.dims["J"])
         estimopts = {
             'stream': np.random.default_rng(2023),
-            'num_sim': 150,
+            'num_sim': 50,
             'delta_tol': 1e-12,
             'delta_max_iter': 100000,
             'jac_tol': 1e-8,
@@ -131,7 +131,7 @@ class Model:
 
         # Divide to get a T x J x S matrix
         cond_choice = numer /  (1+ denom)
-        #print(cond_choice.shape)
+        print(cond_choice.shape)
 
         # Take the mean over all S simulations
         cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
@@ -165,13 +165,15 @@ class Model:
         delta = np.reshape(self.get_delta(beta_o, beta_u), (self.data.dims['T']*self.data.dims['J'],1))
         X = np.reshape(self.data.x_1,(self.data.dims['T']*self.data.dims['J'],self.data.dims['K_1']))
         Z = np.reshape(self.data.z,(self.data.dims['T']*self.data.dims['J'],self.data.dims['Z']))
-        beta_bar = iv_2sls(X,Z,delta)
+        exog_chars = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T']*self.data.dims['J'],1))
+        Z_with_exog = np.append(Z, exog_chars, 1)
+        beta_bar = iv_2sls(X,Z_with_exog,delta)
 
         # Unobserved quality as a function of parameters
         xi = delta - X @ beta_bar
 
         # Quadratic form of xi and z
-        G_hat = (np.transpose(xi) @ Z)
+        G_hat = (np.transpose(xi) @ Z_with_exog)
         Q = G_hat @ W @ np.transpose(G_hat)
 
         return Q.flatten()[0]
@@ -214,7 +216,7 @@ class Model:
         # GMM
         print("Estimating non-linear parameters...")
         beta_tilde_init = self.beta[self.data.dims['K_1']:]
-        res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init,
+        res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z']+1)), beta_tilde_init,
                        method='Nelder-Mead')
         self.beta_o_hat = np.reshape(res.x[:self.data.dims['D'] * self.data.dims['K_2']],
                                      (self.data.dims['D'], self.data.dims['K_2']))
@@ -228,7 +230,9 @@ class Model:
                                 (self.data.dims['T'] * self.data.dims['J'], 1))
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
         Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
-        self.beta_bar_hat = iv_2sls(X, Z, self.delta)
+        exog_chars = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T'] * self.data.dims['J'], 1))
+        Z_with_exog = np.append(Z, exog_chars, 1)
+        self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta)
         print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
 
 

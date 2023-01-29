@@ -9,11 +9,10 @@ import sys
 def main(args):
 
     # Load BLP data into data class
-    dataobj = blpdata.Data(data.LOGIT_DATA_LOC,spec="logit",add_outside_good=False)
-    modelobj = blpmodel.Model(dataobj,"2sls")
+    dataobj = blpdata.Data(data.BLP_DATA_LOC,spec="blp",add_outside_good=False)
+    modelobj = blpmodel.Model(dataobj,"blp")
     I = np.eye(dataobj.dims['Z'])
     modelobj.estimate()
-
 
 if __name__ == '__main__':
     main(sys.argv)
