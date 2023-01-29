@@ -13,10 +13,11 @@ class Model:
     # Set up an instance of this class
     def __init__(self, data, estimatortype, estimopts={}):
         """
+        Initial the model object
 
-        :param data:
-        :param estimatortype:
-        :param estimopts:
+        :param data: The Data object
+        :param estimatortype: One of ("mle","gmm","2sls")
+        :param estimopts: Optional vector of estimation options for GMM/MLE. Set to defaults if not provided
         """
         # Assign data object
         self.data = data
@@ -49,15 +50,16 @@ class Model:
 
     def get_estim_opts(self):
         """
+        Set default estimator options
 
-        :return:
+        :return estimopts: Dictionary containing estimator options
         """
         delta_init = np.random.randn(self.data.dims["T"], self.data.dims["J"])
         estimopts = {
             'stream': np.random.default_rng(2023),
             'num_sim': 150,
             'delta_tol': 1e-12,
-            'delta_max_iter': 100000,
+            'delta_max_iter': 10000,
             'jac_tol': 1e-8,
             'delta_init': delta_init
         }
@@ -66,21 +68,21 @@ class Model:
 
     def init_parameter_estimates(self):
         """
-
+        Initialize parameter estimates using the estimopts dictionary.
         """
 
         # Linear parameters
         self.beta_bar_hat = self.estimopts['stream'].uniform(-1, 1, self.data.dims["K_1"])
-        #print(self.beta_bar_hat)
+        # print(self.beta_bar_hat)
 
         # Parameters on interactions of observed household chararacteristics and product characteristics
         self.beta_o_hat = self.estimopts['stream'].uniform(-1, 1, (self.data.dims["D"], self.data.dims["K_2"]))
-        #print(self.beta_o_hat)
+        # print(self.beta_o_hat)
 
         # Random coefficients (gamma)
         self.beta_u_hat = np.tril(
-            self.estimopts['stream'].uniform(-0.05, 0.05, (self.data.dims["K_3"], self.data.dims["K_3"])))
-        #print(self.beta_u_hat)
+            self.estimopts['stream'].uniform(-1, 0, (self.data.dims["K_3"], self.data.dims["K_3"])))
+        # print(self.beta_u_hat)
 
         # Full parameter vector
         self.beta = np.concatenate((self.beta_bar_hat, self.beta_o_hat.flatten(), self.beta_u_hat.flatten()))
@@ -95,30 +97,58 @@ class Model:
         """
         return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
 
-    def get_model_market_shares(self, delta, beta_o, beta_u):
+    def get_model_market_shares(self, delta, beta_u, mean=True):
         """
 
         :param delta: (T x J) matrix of mean indirect utilities by product and market
         :param beta_o: (D x K_2) matrix of coefficients on household/individual characteristics
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
+        :param mean: return numerically integrated choice probabilities
         :return cond_choice : (T x J) matrix of predicted market shares for each good j in market t
         """
 
-
         # Mean indirect utility delta (reshape (T x J) -> (T x J x S))
         delta = np.reshape(np.repeat(delta, self.estimopts['num_sim']),
-                           (self.data.dims['T'],self.data.dims['J'], self.estimopts['num_sim']))
-
-        # Observed individual taste variation
-        d_beta_o = np.matmul(self.data.d, beta_o)
-        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
+                           (self.data.dims['T'], self.data.dims['J'], self.estimopts['num_sim']))
 
         # Unobserved individual taste variation
         x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
         x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
 
         # Deviation from mean indirect utility
-        mu = x3_beta_u_hat_nu + d_beta_o_x
+        mu = x3_beta_u_hat_nu
+
+        # Indirect conditional utility
+        indirect_cond_util = delta + mu  # T x J x S
+
+        # Find numerator and denominator
+        numer = np.exp(indirect_cond_util) /
+        denom = np.nansum(numer, 1, keepdims=True)
+        denom = np.repeat(denom, self.data.dims['J'], axis=1)
+        np.testing.assert_array_less(numer, denom)
+
+        # Divide to get a T x J x S matrix
+        cond_choice = numer / (1 + denom)
+        # print(cond_choice)
+
+        # Take the mean over all S simulations if we want to take the mean
+        if mean:
+            cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
+
+        return cond_choice
+
+    def get_indiv_choice_prob(self, delta, beta_o):
+
+        # Mean indirect utility delta (reshape (T x J) -> (T x J x I))
+        delta = np.reshape(np.repeat(delta, self.data.dims['I']),
+                           (self.data.dims['T'], self.data.dims['J'], self.data.dims['I']))
+
+        # Observed individual taste variation
+        d_beta_o = np.matmul(self.data.d, beta_o)
+        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
+
+        # Deviation from mean indirect utility
+        mu = d_beta_o_x
 
         # Indirect conditional utility
         indirect_cond_util = delta + mu  # T x J x S
@@ -127,45 +157,41 @@ class Model:
         numer = np.exp(indirect_cond_util)
         denom = np.nansum(numer, 1, keepdims=True)
         denom = np.repeat(denom, self.data.dims['J'], axis=1)
-        np.testing.assert_array_less(numer,denom)
+        np.testing.assert_array_less(numer, denom)
 
-        # Divide to get a T x J x S matrix
-        cond_choice = numer /  (1+ denom)
-        #print(cond_choice.shape)
+        # Divide to get a T x J x I matrix
+        indiv_choice = numer / (1 + denom)
 
-        # Take the mean over all S simulations
-        cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
+        return indiv_choice
 
-        return cond_choice
-
-    def get_delta(self, beta_o, beta_u, noisy=False):
+    def get_delta(self, beta_u, noisy=False):
 
         diff = np.inf
         niter = 1
         delta = self.estimopts['delta_init']
         while diff > self.estimopts['delta_tol'] and niter < self.estimopts['delta_max_iter']:
-            #print(f"Iter: {niter}")
+            # print(f"Iter: {niter}")
             old_delta = delta
-            delta = self.contraction_map(delta, beta_o, beta_u)
+            delta = self.contraction_map(delta, beta_u)
             diff = np.amax(abs(delta - old_delta))
             niter += 1
 
         if noisy:
             print(f"Converged with diff: {diff} and iterations: {niter}")
-            print(delta[2,3])
+            print(delta[2, 3])
 
         return delta
 
-    def contraction_map(self, delta, beta_o, beta_u):
-        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
+    def contraction_map(self, delta, beta_u):
+        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
 
-    def get_moments(self, beta_o, beta_u, W):
+    def get_moments(self, beta_u, W):
 
         # Recover linear parameters as a function of non-linear parameters via 2SLS
-        delta = np.reshape(self.get_delta(beta_o, beta_u), (self.data.dims['T']*self.data.dims['J'],1))
-        X = np.reshape(self.data.x_1,(self.data.dims['T']*self.data.dims['J'],self.data.dims['K_1']))
-        Z = np.reshape(self.data.z,(self.data.dims['T']*self.data.dims['J'],self.data.dims['Z']))
-        beta_bar = iv_2sls(X,Z,delta)
+        delta = np.reshape(self.get_delta(beta_u), (self.data.dims['T'] * self.data.dims['J'], 1))
+        X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+        Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+        beta_bar = iv_2sls(X, Z, delta)
 
         # Unobserved quality as a function of parameters
         xi = delta - X @ beta_bar
@@ -180,12 +206,11 @@ class Model:
         pass
 
     # Should we also pass a weighting matrix?
-    def blp_objective(self, beta_tilde, W):
+    def blp_objective(self, beta_u, W):
 
         # Break up parameter vector
-        beta_o = np.reshape(beta_tilde[:self.data.dims['D']*self.data.dims['K_2']],(self.data.dims['D'],self.data.dims['K_2']))
-        beta_u = get_lower_triangular(beta_tilde[self.data.dims['D']*self.data.dims['K_2']:])
-        return self.get_moments(beta_o, beta_u, W)
+        beta_u = get_lower_triangular(beta_u)
+        return self.get_moments(beta_u, W)
 
     def estimate(self):
 
@@ -193,21 +218,23 @@ class Model:
         # we are not reporting std. errors
         if self.modeltype == "blp":
             self.estimate_blp()
-
         elif self.modeltype == "logit":
-            if self.estimatortype=="gmm":
+            if self.estimatortype == "gmm":
                 self.estimate_blp()
-            elif self.estimatortype=="2sls":
-                outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
-                share_by_outside_good = self.data.s / outside_share
-                share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
-                log_shares_outside = np.log(share_by_outside_good_long)
-                X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
-                Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
-                self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside)
-                print(f"The estimates (logit) = {self.beta_bar_hat}")
+            elif self.estimatortype == "2sls":
+                self.estimate_logit()
         else:
             pass
+
+    def estimate_logit(self):
+        outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
+        share_by_outside_good = self.data.s / outside_share
+        share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
+        log_shares_outside = np.log(share_by_outside_good_long)
+        X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+        Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+        self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside)
+        print(f"The estimates (logit) = {self.beta_bar_hat}")
 
     def estimate_blp(self):
 
@@ -216,24 +243,63 @@ class Model:
         beta_tilde_init = self.beta[self.data.dims['K_1']:]
         res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'])), beta_tilde_init,
                        method='Nelder-Mead')
-        self.beta_o_hat = np.reshape(res.x[:self.data.dims['D'] * self.data.dims['K_2']],
-                                     (self.data.dims['D'], self.data.dims['K_2']))
         self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D'] * self.data.dims['K_2']:])
-        print(f"The estimates of the coefficients on observed chars = {self.beta_o_hat}")
         print(f"The estimates of random coefficients = {self.beta_u_hat}")
 
         # 2SLS
         print("Estimating linear parameters...")
-        self.delta = np.reshape(self.get_delta(self.beta_o_hat, self.beta_u_hat),
+        self.delta = np.reshape(self.get_delta(self.beta_u_hat),
                                 (self.data.dims['T'] * self.data.dims['J'], 1))
+
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
         Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
         self.beta_bar_hat = iv_2sls(X, Z, self.delta)
         print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
 
-
     def compute_elasticities(self):
-        pass
+        # Initialize the elasticities
+        e = np.zeros((self.data.dims['J'], self.data.dims['J']))
+
+        # Find the predicted market shares, with and without taking the mean
+        s_hat = self.get_model_market_shares(self.delta, self.beta_u_hat, mean=False)
+        s_hat_mean = self.get_model_market_shares(self.delta, self.beta_u_hat)
+
+        # Loop over all values of J and then over all values of K
+        for j in range(self.data.dims['J']):
+            for k in range(self.data.dims['J']):
+                # Break it out by case for if j = k or not
+                if j != k:
+                    # Find separately for j and k then multiply and get mean
+                    s_hat_j = s_hat[:, j, :]
+                    s_hat_k = s_hat[:, k, :]
+                    j_times_k = np.multiply(s_hat_j, s_hat_k)
+                    mean_j_times_k = np.nanmean(j_times_k, 1)
+
+                    # Find alpha times p_k divided by predicted sj
+                    alpha_p_k = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, k, 0])
+                    s_hat_mean_j = s_hat_mean[:, j]
+                    scaling_factor = np.divide(alpha_p_k, s_hat_mean_j)
+
+                    # Find full elasticities and average over all markets then output into matrix
+                    full_elasticity = np.multiply(mean_j_times_k, scaling_factor)
+                    average_elasticity = np.nanmean(full_elasticity, 0)
+                    e[j, k] = average_elasticity
+                else:
+                    # Find sj * (1 - sj)
+                    s_hat_j = s_hat[:, j, :]
+                    j_times_one_minus = np.multiply(s_hat_j, 1 - s_hat_j)
+                    mean_j_times_one_minus = np.nanmean(j_times_one_minus)
+
+                    # Find negative alpha times p_j divided by sj
+                    minus_alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
+                    s_hat_mean_j = s_hat_mean[:, j]
+                    scaling_factor = np.divide(minus_alpha_p_j, s_hat_mean_j)
+
+                    # Find full elasticities and average over all markets then output into matrix
+                    full_elasticity = np.multiply(mean_j_times_one_minus, scaling_factor)
+                    average_elasticity = np.nanmean(full_elasticity, 0)
+                    e[j, k] = average_elasticity
+        return e
 
     def print_esimates(self, filename):
         pass

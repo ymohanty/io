@@ -89,6 +89,12 @@ class Data:
             self.dims["T"] = 1
         self.dims["J"] = len(self.agg_data[self.model_vars["j"]].unique())
 
+        # Num. of individuals
+        if self.spec != "micro":
+            self.dims['I'] = 1
+        else:
+            self.dims['I'] = len(self.micro_data.index)
+
         # Household and product characteristics
         self.dims["K_1"] = len(self.model_vars["x_1"])
         self.dims["K_2"] = len(self.model_vars["x_2"])
@@ -144,7 +150,7 @@ class Data:
 
         """
         if self.spec == "micro":
-            return self.micro_data[self.model_vars['d']]
+            return self.micro_data[self.model_vars['d']].to_numpy()
         else:
             return np.zeros((1,0))
 
