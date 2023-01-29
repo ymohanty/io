@@ -16,3 +16,13 @@ def get_lower_triangular(array):
         arr.append(a)
 
     return np.concatenate(tuple(arr), axis=0)
+
+def test_column_equal(array):
+    cols = array.shape[1]
+    out = []
+    for i in range(cols):
+        print(np.max(array[:,i]) - np.min(array[:,i]))
+        out.append(np.max(array[:,i]) == np.min(array[:,i]))
+
+    return out
+
