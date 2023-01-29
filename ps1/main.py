@@ -14,7 +14,7 @@ def main(args):
     #I = np.eye(dataobj.dims['Z'])
     modelobj.estimate()
     test = modelobj.compute_elasticities()
-    print(np.tril(test))
+    print(test)
 
 if __name__ == '__main__':
     main(sys.argv)

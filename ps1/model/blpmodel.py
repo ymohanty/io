@@ -95,12 +95,13 @@ class Model:
         """
         return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
 
-    def get_model_market_shares(self, delta, beta_o, beta_u, no_mean=False):
+    def get_model_market_shares(self, delta, beta_u, mean=True):
         """
 
         :param delta: (T x J) matrix of mean indirect utilities by product and market
         :param beta_o: (D x K_2) matrix of coefficients on household/individual characteristics
         :param beta_u: (K_3 x K_3) lower triangular matrix of random coefficients
+        :param mean: return numerically integrated choice probabilities
         :return cond_choice : (T x J) matrix of predicted market shares for each good j in market t
         """
 
@@ -109,16 +110,12 @@ class Model:
         delta = np.reshape(np.repeat(delta, self.estimopts['num_sim']),
                            (self.data.dims['T'],self.data.dims['J'], self.estimopts['num_sim']))
 
-        # Observed individual taste variation
-        d_beta_o = np.matmul(self.data.d, beta_o)
-        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
-
         # Unobserved individual taste variation
         x3_beta_u_hat = np.matmul(self.data.x_3, beta_u)
         x3_beta_u_hat_nu = np.matmul(x3_beta_u_hat, self.nu)
 
         # Deviation from mean indirect utility
-        mu = x3_beta_u_hat_nu + d_beta_o_x
+        mu = x3_beta_u_hat_nu
 
         # Indirect conditional utility
         indirect_cond_util = delta + mu  # T x J x S
@@ -134,12 +131,40 @@ class Model:
         #print(cond_choice)
 
         # Take the mean over all S simulations if we want to take the mean
-        if no_mean == False:
+        if mean:
             cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
 
         return cond_choice
 
-    def get_delta(self, beta_o, beta_u, noisy=False):
+    def get_indiv_choice_prob(self, beta_o):
+
+        # Mean indirect utility delta (reshape (T x J) -> (T x J x I))
+        delta = np.reshape(np.repeat(delta, self.data.dims['I']),
+                           (self.data.dims['T'], self.data.dims['J'], self.data.dims['I']))
+
+        # Observed individual taste variation
+        d_beta_o = np.matmul(self.data.d, beta_o)
+        d_beta_o_x = np.matmul(self.data.x_2, np.transpose(d_beta_o))
+
+        # Deviation from mean indirect utility
+        mu = d_beta_o_x
+
+        # Indirect conditional utility
+        indirect_cond_util = delta + mu  # T x J x S
+
+        # Find numerator and denominator
+        numer = np.exp(indirect_cond_util)
+        denom = np.nansum(numer, 1, keepdims=True)
+        denom = np.repeat(denom, self.data.dims['J'], axis=1)
+        np.testing.assert_array_less(numer,denom)
+
+        # Divide to get a T x J x I matrix
+        indiv_choice = numer / (1 + denom)
+
+        return indiv_choice
+
+
+    def get_delta(self, beta_u, noisy=False):
 
         diff = np.inf
         niter = 1
@@ -147,7 +172,7 @@ class Model:
         while diff > self.estimopts['delta_tol'] and niter < self.estimopts['delta_max_iter']:
             #print(f"Iter: {niter}")
             old_delta = delta
-            delta = self.contraction_map(delta, beta_o, beta_u)
+            delta = self.contraction_map(delta, beta_u)
             diff = np.amax(abs(delta - old_delta))
             niter += 1
 
@@ -157,13 +182,13 @@ class Model:
 
         return delta
 
-    def contraction_map(self, delta, beta_o, beta_u):
-        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_o, beta_u))
+    def contraction_map(self, delta, beta_u):
+        return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
 
     def get_moments(self, beta_o, beta_u, W):
 
         # Recover linear parameters as a function of non-linear parameters via 2SLS
-        delta = np.reshape(self.get_delta(beta_o, beta_u), (self.data.dims['T']*self.data.dims['J'],1))
+        delta = np.reshape(self.get_delta(beta_u), (self.data.dims['T']*self.data.dims['J'],1))
         X = np.reshape(self.data.x_1,(self.data.dims['T']*self.data.dims['J'],self.data.dims['K_1']))
         Z = np.reshape(self.data.z,(self.data.dims['T']*self.data.dims['J'],self.data.dims['Z']))
         beta_bar = iv_2sls(X,Z,delta)
@@ -205,7 +230,7 @@ class Model:
 
             # 2SLS
             print("Estimating linear parameters...")
-            self.delta = np.reshape(self.get_delta(self.beta_o_hat,self.beta_u_hat), (self.data.dims['T']*self.data.dims['J'],1))
+            self.delta = np.reshape(self.get_delta(self.beta_u_hat), (self.data.dims['T']*self.data.dims['J'],1))
             X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
             Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
             self.beta_bar_hat = iv_2sls(X, Z, self.delta)
@@ -222,8 +247,8 @@ class Model:
         e = np.zeros((self.data.dims['J'], self.data.dims['J']))
 
         # Find the predicted market shares, with and without taking the mean
-        s_hat = self.get_model_market_shares(self.delta, self.beta_o_hat, self.beta_u_hat, no_mean=True)
-        s_hat_mean = self.get_model_market_shares(self.delta, self.beta_o_hat, self.beta_u_hat)
+        s_hat = self.get_model_market_shares(self.delta, self.beta_u_hat, mean=False)
+        s_hat_mean = self.get_model_market_shares(self.delta, self.beta_u_hat)
 
         # Loop over all values of J and then over all values of K
         for j in range(self.data.dims['J']):
@@ -234,33 +259,31 @@ class Model:
                     s_hat_j = s_hat[:, j, :]
                     s_hat_k = s_hat[:, k, :]
                     j_times_k = np.multiply(s_hat_j, s_hat_k)
-                    print(s_hat_j == s_hat_k)
                     mean_j_times_k = np.nanmean(j_times_k, 1)
 
                     # Find alpha times p_k divided by predicted sj
                     alpha_p_k = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, k, 0])
                     s_hat_mean_j = s_hat_mean[:, j]
-                    #scaling_factor = np.divide(alpha_p_k, s_hat_mean_j)
+                    scaling_factor = np.divide(alpha_p_k, s_hat_mean_j)
 
                     # Find full elasticities and average over all markets then output into matrix
-                    #full_elasticity = np.multiply(mean_j_times_k, scaling_factor)
-                    average_elasticity = np.nanmean(mean_j_times_k, 0)
+                    full_elasticity = np.multiply(mean_j_times_k, scaling_factor)
+                    average_elasticity = np.nanmean(full_elasticity, 0)
                     e[j, k] = average_elasticity
                 else:
-                    pass
                     # Find sj * (1 - sj)
-                    # s_hat_j = s_hat[:, j, :]
-                    # j_times_one_minus = np.multiply(s_hat_j, 1-s_hat_j)
-                    # mean_j_times_one_minus = np.nanmean(j_times_one_minus)
-                    #
-                    # # Find negative alpha times p_j divided by sj
-                    # minus_alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
-                    # s_hat_mean_j = s_hat_mean[:, j]
-                    # scaling_factor = np.divide(minus_alpha_p_j, s_hat_mean_j)
-                    #
-                    # # Find full elasticities and average over all markets then output into matrix
-                    # full_elasticity = np.multiply(mean_j_times_one_minus, scaling_factor)
-                    # average_elasticity = np.nanmean(full_elasticity, 0)
+                    s_hat_j = s_hat[:, j, :]
+                    j_times_one_minus = np.multiply(s_hat_j, 1-s_hat_j)
+                    mean_j_times_one_minus = np.nanmean(j_times_one_minus)
+
+                    # Find negative alpha times p_j divided by sj
+                    minus_alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
+                    s_hat_mean_j = s_hat_mean[:, j]
+                    scaling_factor = np.divide(minus_alpha_p_j, s_hat_mean_j)
+
+                    # Find full elasticities and average over all markets then output into matrix
+                    full_elasticity = np.multiply(mean_j_times_one_minus, scaling_factor)
+                    average_elasticity = np.nanmean(full_elasticity, 0)
                     e[j, k] = 1
         return e
 
