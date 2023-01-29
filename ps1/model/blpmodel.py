@@ -122,7 +122,7 @@ class Model:
         indirect_cond_util = delta + mu  # T x J x S
 
         # Find numerator and denominator
-        numer = np.exp(indirect_cond_util) /
+        numer = np.exp(indirect_cond_util) 
         denom = np.nansum(numer, 1, keepdims=True)
         denom = np.repeat(denom, self.data.dims['J'], axis=1)
         np.testing.assert_array_less(numer, denom)
