@@ -120,6 +120,7 @@ class Model:
 
         # Indirect conditional utility
         indirect_cond_util = delta + mu  # T x J x S
+        indirect_cond_util = np.clip(indirect_cond_util, None, 35)
 
         # Find numerator and denominator
         numer = np.exp(indirect_cond_util) 
