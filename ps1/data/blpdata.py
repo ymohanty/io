@@ -17,20 +17,20 @@ class Data:
         ## Declare attributes
 
         # Metadata
-        self.spec = spec                 # Specification used
-        self.dims = {}                   # Data dimensions
-        self.num_rc = None               # Num. random coefficients
+        self.spec = spec  # Specification used
+        self.dims = {}  # Data dimensions
+        self.num_rc = None  # Num. random coefficients
         self.model_vars = {}
         self.add_outside_good = add_outside_good
 
         # Data matrices
-        self.choice = None               # I x 1 (Indiv. choices)
-        self.d = None                    # I x D (Indiv. char)
-        self.x_1 = None                  # T x J x K_1 (Chars that go into mean utility)
-        self.x_2 = None                  # T x J x K_2 (Chars that interact with observed hh. chars)
-        self.x_3 = None                  # T x J x K_3 (Chars with unobserved taste variation)
-        self.z = None                    # T x J x Z (instruments)
-        self.s = None                    # T x J (observed market shares)
+        self.choice = None  # I x 1 (Indiv. choices)
+        self.d = None  # I x D (Indiv. char)
+        self.x_1 = None  # T x J x K_1 (Chars that go into mean utility)
+        self.x_2 = None  # T x J x K_2 (Chars that interact with observed hh. chars)
+        self.x_3 = None  # T x J x K_3 (Chars with unobserved taste variation)
+        self.z = None  # T x J x Z (instruments)
+        self.s = None  # T x J (observed market shares)
 
         ## Initialize instance
 
@@ -52,7 +52,7 @@ class Data:
         # The BLP routine from ps1_ex4.csv
         if self.spec == "blp":
             self.agg_data = self.raw_data
-            self.model_vars = {"i":None,"c": None, "t": "market", "j": "choice", "x_1": ["p", "x"], "x_2": [],
+            self.model_vars = {"i": None, "c": None, "t": "market", "j": "choice", "x_1": ["p", "x"], "x_2": [],
                                "x_3": ["p", "x"],
                                "d": [], "s": "shares", "z": ["z1", "z2", "z3", "z4", "z5", "z6"]
                                }
@@ -60,15 +60,16 @@ class Data:
         # The logit routine for ps1_ex3.csv
         elif self.spec == "logit":
             self.agg_data = self.raw_data
-            self.model_vars = {"i":None,"c": None, "t": "market", "j": "Product", "x_1": ["Prices", "x"], "x_2": [],
+            self.model_vars = {"i": None, "c": None, "t": "market", "j": "Product", "x_1": ["Prices", "x"], "x_2": [],
                                "x_3": [],
                                "d": [], "s": "Shares", "z": ["z"]
                                }
         # The micro data logit routine ps1_ex2.csv
         elif self.spec == "micro":
-            self.model_vars = {"i":"i","c": "choice", "t": None, "j": "j", "x_1": ["x.1", "x.2", "x.3"], "x_2":["x.1", "x.2", "x.3"],
+            self.model_vars = {"i": "i", "c": "choice", "t": None, "j": "j", "x_1": ["x.1", "x.2", "x.3"],
+                               "x_2": ["x.1", "x.2", "x.3"],
                                "x_3": [],
-                               "d": ["d.1","d.2"], "s": "s", "z": []
+                               "d": ["d.1", "d.2"], "s": "s", "z": []
                                }
             self.agg_data, self.micro_data = self.get_working_data()
 
@@ -88,6 +89,12 @@ class Data:
             print("Micro data found: setting number of markets to 1...")
             self.dims["T"] = 1
         self.dims["J"] = len(self.agg_data[self.model_vars["j"]].unique())
+
+        # Num. of individuals
+        if self.spec != "micro":
+            self.dims['I'] = 1
+        else:
+            self.dims['I'] = len(self.micro_data.index)
 
         # Household and product characteristics
         self.dims["K_1"] = len(self.model_vars["x_1"])
@@ -120,7 +127,7 @@ class Data:
         self.z = self.get_instruments()
 
         if self.add_outside_good:
-            self.dims["J"] = self.dims["J"]+1
+            self.dims["J"] = self.dims["J"] + 1
 
     def get_product_char_matrix(self, vars):
         """
@@ -133,8 +140,8 @@ class Data:
         data = np.reshape(data, (self.dims["T"], self.dims["J"], num_cols))
 
         if self.add_outside_good:
-            data_w_outside_good = np.zeros((self.dims["T"] , self.dims["J"]+1, num_cols))
-            data_w_outside_good[ :, 1:self.dims["J"] + 1, :] = data
+            data_w_outside_good = np.zeros((self.dims["T"], self.dims["J"] + 1, num_cols))
+            data_w_outside_good[:, 1:self.dims["J"] + 1, :] = data
             data = data_w_outside_good
 
         return data
@@ -144,16 +151,13 @@ class Data:
 
         """
         if self.spec == "micro":
-            return self.micro_data[self.model_vars['d']]
+            return self.micro_data[self.model_vars['d']].to_numpy()
         else:
-            return np.zeros((1,0))
-
+            return np.zeros((1, 0))
 
     def get_instruments(self):
         return np.reshape(self.agg_data[self.model_vars['z']].to_numpy(),
                           (self.dims["T"], self.dims["J"], self.dims['Z']))
-
-
 
     def get_observed_market_share(self):
         """
@@ -164,7 +168,7 @@ class Data:
         s = np.reshape(data, (self.dims["T"], self.dims["J"]))
 
         if self.add_outside_good:
-            s_w_outside_good = np.zeros((self.dims["T"], self.dims["J"]+1))
+            s_w_outside_good = np.zeros((self.dims["T"], self.dims["J"] + 1))
             s_w_outside_good[:, 1:self.dims["J"] + 1] = s
             s_w_outside_good[:, 0] = 1 - np.sum(s, axis=1)
             s = s_w_outside_good
@@ -181,21 +185,21 @@ class Data:
         # Aggregate raw data into market level data to recover shares and characteristics
         agg_data = self.raw_data.groupby("choice").mean()
         agg_data = agg_data[self.model_vars["x_1"]]
-        observed_market_shares = self.raw_data.groupby("choice").size()/len(self.raw_data.index)
+        observed_market_shares = self.raw_data.groupby("choice").size() / len(self.raw_data.index)
         agg_data["s"] = pd.Series(observed_market_shares)
         agg_data.reset_index(inplace=True)
-        agg_data = agg_data.rename(columns={"choice":"j"})
+        agg_data = agg_data.rename(columns={"choice": "j"})
 
         # Collect micro data separately
         indiv_indices = pd.Series(data=list(range(len(self.raw_data.index))),
                                   name=self.model_vars["i"])
         indiv_chars = self.raw_data[self.model_vars["d"]]
         indiv_choices = self.raw_data[self.model_vars["c"]]
-        micro_data = pd.concat([indiv_indices,indiv_chars,indiv_choices], axis = 1)
+        micro_data = pd.concat([indiv_indices, indiv_chars, indiv_choices], axis=1)
 
         # Return aggregate and microdata
         return agg_data, micro_data
 
+
 if __name__ == '__main__':
     pass
-

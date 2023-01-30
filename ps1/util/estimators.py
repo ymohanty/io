@@ -1,7 +1,7 @@
 import numpy as np
 
 # Function to compute 2SLS estimator
-def iv_2sls(X, Z, Y, include_constant=False):
+def iv_2sls(X, Z, Y, include_constant=False, return_X=False):
 
     if include_constant:
         X = np.concatenate((np.ones((X.shape[0],1)),X),axis=1)
@@ -16,4 +16,7 @@ def iv_2sls(X, Z, Y, include_constant=False):
     second_part = XT @ Z @ np.linalg.inv(ZT @ Z) @ ZT @ Y
     estimator = np.matmul(first_part, second_part)
 
-    return estimator
+    if return_X:
+        return estimator, X
+    else:
+        return estimator

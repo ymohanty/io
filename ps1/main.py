@@ -10,10 +10,10 @@ def main(args):
 
     # Load BLP data into data class
     dataobj = blpdata.Data(data.BLP_DATA_LOC,spec="blp",add_outside_good=False)
-    print(dataobj.x_1[1,4,0])
-    modelobj = blpmodel.Model(dataobj,"gmm")
-    #I = np.eye(dataobj.dims['Z'])
+    modelobj = blpmodel.Model(dataobj, "2sls")
     modelobj.estimate()
+    test = modelobj.compute_elasticities()
+    print(test)
 
 if __name__ == '__main__':
     main(sys.argv)
