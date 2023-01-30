@@ -1,7 +1,12 @@
 import numpy as np
 
 # Function to compute 2SLS estimator
-def iv_2sls(X, Z, Y):
+def iv_2sls(X, Z, Y, include_constant=False):
+
+    if include_constant:
+        X = np.concatenate((np.ones((X.shape[0],1)),X),axis=1)
+        Z = np.concatenate((np.ones((Z.shape[0],1)),Z),axis=1)
+
     # Make transposes
     XT = np.transpose(X)
     ZT = np.transpose(Z)

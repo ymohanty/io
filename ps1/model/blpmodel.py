@@ -131,7 +131,6 @@ class Model:
 
         # Divide to get a T x J x S matrix
         cond_choice = numer /  (1+ denom)
-        print(cond_choice.shape)
 
         # Take the mean over all S simulations
         cond_choice = np.nanmean(cond_choice, 2)  # T x J x S -> T x J
@@ -200,14 +199,8 @@ class Model:
             if self.estimatortype=="gmm":
                 self.estimate_blp()
             elif self.estimatortype=="2sls":
-                outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
-                share_by_outside_good = self.data.s / outside_share
-                share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
-                log_shares_outside = np.log(share_by_outside_good_long)
-                X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
-                Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
-                self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside)
-                print(f"The estimates (logit) = {self.beta_bar_hat}")
+                self.estimate_logit()
+
         else:
             pass
 
@@ -232,8 +225,26 @@ class Model:
         Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
         exog_chars = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T'] * self.data.dims['J'], 1))
         Z_with_exog = np.append(Z, exog_chars, 1)
-        self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta)
+        self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta, include_constant=True)
         print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
+
+    def estimate_logit(self):
+
+        # Calculate the outside share by market
+        outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
+
+        # Compute log(s_j/s_0)
+        share_by_outside_good = self.data.s / outside_share
+        share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
+        log_shares_outside = np.log(share_by_outside_good_long)
+
+        # Vectors of product characteristics and instruments
+        X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
+        Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
+        Z = np.concatenate((Z, X[:,1:]),axis=1)
+
+        self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside, include_constant=True)
+        print(f"The estimates (logit) = {self.beta_bar_hat}")
 
 
     def compute_elasticities(self):
