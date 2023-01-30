@@ -296,12 +296,12 @@ class Model:
                     # Find full elasticities and average over all markets then output into matrix
                     full_elasticity = np.multiply(mean_j_times_k, scaling_factor)
                     average_elasticity = np.nanmean(full_elasticity, 0)
-                    e[j, k] = average_elasticity
+                    e[j, k] = -average_elasticity
                 else:
                     # Find sj * (1 - sj)
                     s_hat_j = s_hat[:, j, :]
                     j_times_one_minus = np.multiply(s_hat_j, 1 - s_hat_j)
-                    mean_j_times_one_minus = np.nanmean(j_times_one_minus)
+                    mean_j_times_one_minus = np.nanmean(j_times_one_minus, 1)
 
                     # Find negative alpha times p_j divided by sj
                     alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])

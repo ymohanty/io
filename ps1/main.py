@@ -14,8 +14,8 @@ def main(args):
     modelobj.estimate()
     test = modelobj.compute_elasticities()
     print(test)
-    test_2 = modelobj.marginal_costs()
-    print(test_2)
+    #test_2 = modelobj.marginal_costs()
+    #print(test_2)
 
 if __name__ == '__main__':
     main(sys.argv)
