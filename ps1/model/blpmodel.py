@@ -258,6 +258,7 @@ class Model:
         share_by_outside_good = self.data.s / outside_share
         share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
         log_shares_outside = np.log(share_by_outside_good_long)
+        self.delta = log_shares_outside
 
         # Vectors of product characteristics and instruments
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
@@ -303,15 +304,30 @@ class Model:
                     mean_j_times_one_minus = np.nanmean(j_times_one_minus)
 
                     # Find negative alpha times p_j divided by sj
-                    minus_alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
+                    alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
                     s_hat_mean_j = s_hat_mean[:, j]
-                    scaling_factor = np.divide(minus_alpha_p_j, s_hat_mean_j)
+                    scaling_factor = np.divide(alpha_p_j, s_hat_mean_j)
 
                     # Find full elasticities and average over all markets then output into matrix
                     full_elasticity = np.multiply(mean_j_times_one_minus, scaling_factor)
                     average_elasticity = np.nanmean(full_elasticity, 0)
                     e[j, k] = average_elasticity
         return e
+
+    # Function to back out marginal costs from the logit data (prices and estimated own-price elasticities)
+    def marginal_costs(self):
+        # Initialize marginal cost array
+        mc_array = np.zeros((self.data.dims['J'], 1))
+
+        # Find average price, shares, and elasticities over all markets
+        for j in range(self.data.dims['J']):
+            average_pj = np.mean(self.data.x_1[:, j, 0], 0)
+            average_sj = np.mean(self.data.s[:, j], 0)
+            average_elast = self.compute_elasticities()[j, j]
+
+            # Set the marginal cost equal to the correct formula.
+            mc_array[j, 0] = average_pj + (average_sj / average_elast)
+        return mc_array
 
     def print_esimates(self, filename):
         pass
