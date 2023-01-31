@@ -6,8 +6,6 @@ import pandas as pd
 import itertools
 
 
-# from util import
-
 
 class Model:
 
@@ -97,7 +95,7 @@ class Model:
 
     def draw_random_shocks(self):
         """
-
+        Draw random coefficients from a standard normal distribution.
         """
         return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
 
@@ -184,11 +182,12 @@ class Model:
 
     def get_delta(self, beta_u=[], beta_o=[], noisy=False):
         """
+        Recover the mean indirect utilities as a function of non-linear parameters
 
-        :param beta_u:
-        :param beta_o:
-        :param noisy:
-        :return:
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :param noisy: Switch to show convergence status and number of iterations
+        :return: (T x J) matrix of mean indirect utilities
         """
         diff = np.inf
         niter = 1
@@ -212,11 +211,12 @@ class Model:
 
     def contraction_map(self, delta, beta_u=[], beta_o=[]):
         """
+        One iteration of the standard contraction map from BLP'95
 
-        :param delta:
-        :param beta_u:
-        :param beta_o:
-        :return:
+        :param delta: (T x J) matrix of mean indirect utilities
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :return: (T x J) matrix of mean indirect utilities
         """
         if beta_o == []:
             return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
@@ -249,10 +249,11 @@ class Model:
 
     def get_likelihood(self, delta, beta_o):
         """
+        Evalualte the negative of the log-likelihood function
 
-        :param delta:
-        :param beta_o:
-        :return:
+        :param delta: (I x J) matrix of mean indirect utilities
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :return: Negative of the log-likelihood
         """
         # Get individual choice probabilities
         prob_chosen_alt = np.zeros((self.data.dims['I'], 1))
@@ -268,11 +269,13 @@ class Model:
         return -np.sum(np.log(prob_chosen_alt))
 
     def mle_objective(self, x, conc_out=False):
-        """
 
-        :param x:
-        :param conc_out:
-        :return:
+        """
+        The objective function for the MLE optimization routine
+
+        :param x: Vector of parameters. Depends on whether we concentrate out mean indirect utilities
+        :param conc_out: Switch to concentrate out mean indirect utilities
+        :return: Likelihood function evaluated at (delta, beta_o) unpacked from x
         """
         if conc_out:
             beta_o = np.reshape(x, (self.data.dims['D'], self.data.dims['K_2']))
@@ -285,10 +288,11 @@ class Model:
     # Should we also pass a weighting matrix?
     def blp_objective(self, beta_u, W):
         """
+        Objective function for the BLP optimization routine
 
-        :param beta_u:
-        :param W:
-        :return:
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param W: (Z x Z) weighting matrix for GMM
+        :return: scalar gmm objective
         """
         # Break up parameter vector
         beta_u = get_lower_triangular(beta_u)
@@ -296,7 +300,7 @@ class Model:
 
     def estimate(self):
         """
-
+        Wrapper for estimation routines
         """
         # No need to do two-step since
         # we are not reporting std. errors
@@ -396,8 +400,9 @@ class Model:
 
     def compute_elasticities(self):
         """
+        Recover matrix of own and cross price elasticities averaged by market
 
-        :return:
+        :return: (JxJ) matrix of elasticities
         """
         # Initialize the elasticities
         e = np.zeros((self.data.dims['J'], self.data.dims['J']))
@@ -446,6 +451,8 @@ class Model:
     # Function to back out marginal costs from the logit data (prices and estimated own-price elasticities)
     def marginal_costs(self):
         """
+        Recover marginal costs from demand estimates using the pricing euqation derived via the Bertrand pricing
+        game.
 
         """
         # Initialize marginal cost array
@@ -465,9 +472,15 @@ class Model:
         self.c = mc_array
 
     def print_estimates(self, filename, title, label):
+        """
+        Print estimates from the model into a latex file
 
+        :param filename: Path to file output
+        :param title: Caption for table
+        :param label: Label for table
+        """
         # Get interaction coefficient names
-        interactions = ["$" +i[0] + " \times " + i[1] + "$" for i in
+        interactions = ["$" + i[0] + " \times " + i[1] + "$" for i in
                         itertools.product(self.data.model_vars['d'], self.data.model_vars['x_2'])]
 
         # Get all variable names
@@ -482,26 +495,45 @@ class Model:
 
         # Get all data
         data = [" "]
-        data.extend(["%.2f"%i for i in self.beta_bar_hat])
+        data.extend(["%.2f" % i for i in self.beta_bar_hat])
         data.extend([" "])
-        data.extend(["%.2f"%i for i in list(self.beta_o_hat.flatten())])
+        data.extend(["%.2f" % i for i in list(self.beta_o_hat.flatten())])
         data.extend([" "])
-        data.extend(["%.2f"%i for i in list(self.beta_u_hat.flatten())])
+        data.extend(["%.2f" % i for i in list(self.beta_u_hat.flatten())])
 
         # Make pandas dataframe
         data_dict = {}
         data_dict[self.estimatortype.upper()] = data
-        df = pd.DataFrame(data=data_dict,index=var_names)
+        df = pd.DataFrame(data=data_dict, index=var_names)
         print(df)
 
         # Print to location
         df.to_latex(buf=filename,
                     caption=title, label=label, index=True, escape=False)
 
-
     def print_elasticities(self, filename, title, label, format_float):
+        """
+        Print latex table of elasticities to disk.
 
+        :param filename: Path to output
+        :param title: Title for latex table
+        :param label: Label for latex table
+        :param format_float: Format strings to correctly format table entries
+        """
         # Make dataframe out of elasticities
         df = pd.DataFrame(self.elasticities)
         df.to_latex(buf=filename, header=[str(j + 1) for j in range(self.data.dims['J'])],
                     float_format=format_float, caption=title, label=label, index=False)
+
+
+    def print_averages(self, filename, title, label, format_float):
+
+        if self.data.spec == "blp":
+            x_1 = np.nanmean(self.data.x_1,axis=0)
+            s = np.transpose(np.nanmean(self.data.s,axis=0))
+            data = {"Price" : x_1[:,0], "Quality" : x_1[:,1], "Share" : s}
+            df = pd.DataFrame(data)
+            df.to_latex(buf=filename,float_format=format_float, caption=title, label=label, index=False)
+
+
+

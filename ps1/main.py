@@ -1,7 +1,6 @@
 import data.blpdata as blpdata
 import model.blpmodel as blpmodel
 import data
-from pathlib import Path
 
 
 def main():
@@ -17,6 +16,7 @@ def main():
     print("=============== END ==============\n\n")
 
     print("============== Estimating the logit model =============\n\n")
+
     # Load logit data into data class and estimate
     dataobj = blpdata.Data(data.LOGIT_DATA_LOC, spec="logit", add_outside_good=False)
     modelobj = blpmodel.Model(dataobj, "2sls")
@@ -32,6 +32,8 @@ def main():
     # Load blp data into data class and estimate
     dataobj = blpdata.Data(data.BLP_DATA_LOC, spec="blp", add_outside_good=False)
     modelobj = blpmodel.Model(dataobj, "gmm")
+    modelobj.print_averages(filename=data._OUT_PATH + "/tab_summary_blp.tex", title="Summary statistics of product data across markets",
+                            label="tabSummaryBLP", format_float='%.3f')
     modelobj.estimate()
     modelobj.print_estimates(filename=data._OUT_PATH + '/tab_gmm_blp.tex',
                             title='BLP GMM estimates of demand parameters',
