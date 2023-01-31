@@ -14,13 +14,13 @@ def main():
     dataobj = blpdata.Data(data.LOGIT_DATA_LOC, spec="logit", add_outside_good=False)
     modelobj = blpmodel.Model(dataobj, "2sls")
     modelobj.estimate()
-    print(modelobj.compute_elasticities())
+    print(f"Elasticity matrix = {modelobj.compute_elasticities()}\n")
 
     # Load blp data into data class and estimate
     dataobj = blpdata.Data(data.BLP_DATA_LOC, spec="blp", add_outside_good=False)
     modelobj = blpmodel.Model(dataobj, "gmm")
     modelobj.estimate()
-    print(modelobj.compute_elasticities())
+    print(f"Elasticity matrix = {modelobj.compute_elasticities()}\n")
 
 
 if __name__ == '__main__':
