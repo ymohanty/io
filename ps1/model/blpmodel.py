@@ -2,6 +2,8 @@ import numpy as np
 from util.estimators import iv_2sls, ols
 from util.utilities import get_lower_triangular
 from scipy.optimize import minimize
+import pandas as pd
+import itertools
 
 
 # from util import
@@ -209,14 +211,25 @@ class Model:
         return delta
 
     def contraction_map(self, delta, beta_u=[], beta_o=[]):
+        """
 
+        :param delta:
+        :param beta_u:
+        :param beta_o:
+        :return:
+        """
         if beta_o == []:
             return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
         else:
             return delta + np.log(self.data.s) - np.log(self.get_indiv_choice_prob(delta, beta_o, agg=True))
 
     def get_moments(self, beta_u, W):
+        """
 
+        :param beta_u:
+        :param W:
+        :return:
+        """
         # Recover linear parameters as a function of non-linear parameters via 2SLS
         delta = np.reshape(self.get_delta(beta_u), (self.data.dims['T'] * self.data.dims['J'], 1))
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
@@ -235,7 +248,12 @@ class Model:
         return Q.flatten()[0]
 
     def get_likelihood(self, delta, beta_o):
+        """
 
+        :param delta:
+        :param beta_o:
+        :return:
+        """
         # Get individual choice probabilities
         prob_chosen_alt = np.zeros((self.data.dims['I'], 1))
         prob_all = self.get_indiv_choice_prob(delta, beta_o)
@@ -250,7 +268,12 @@ class Model:
         return -np.sum(np.log(prob_chosen_alt))
 
     def mle_objective(self, x, conc_out=False):
+        """
 
+        :param x:
+        :param conc_out:
+        :return:
+        """
         if conc_out:
             beta_o = np.reshape(x, (self.data.dims['D'], self.data.dims['K_2']))
             delta = self.get_delta(beta_o=beta_o)
@@ -261,13 +284,20 @@ class Model:
 
     # Should we also pass a weighting matrix?
     def blp_objective(self, beta_u, W):
+        """
 
+        :param beta_u:
+        :param W:
+        :return:
+        """
         # Break up parameter vector
         beta_u = get_lower_triangular(beta_u)
         return self.get_moments(beta_u, W)
 
     def estimate(self):
+        """
 
+        """
         # No need to do two-step since
         # we are not reporting std. errors
         if self.modeltype == "blp":
@@ -283,12 +313,14 @@ class Model:
             self.estimate_micro(conc_out=True)
 
     def estimate_blp(self):
-
+        """
+        Estimate the BLP model as per the specifcations of Question 2
+        """
         # GMM
         print("Estimating non-linear parameters...")
         beta_tilde_init = self.beta[self.data.dims['K_1']:]
         res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'] + 1)), beta_tilde_init,
-                       method='Nelder-Mead', bounds=((0, 10), (-1, 1), (-1, 1)))
+                       method='Nelder-Mead')
         self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D'] * self.data.dims['K_2']:])
         print(f"The estimates of random coefficients = {self.beta_u_hat}\n")
 
@@ -304,8 +336,14 @@ class Model:
         self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta, include_constant=True)[1:]
         print(f"The estimates of the linear parameters = {self.beta_bar_hat}\n")
 
-    def estimate_logit(self):
+        # Recover elasticities
+        self.elasticities = self.compute_elasticities()
+        print(f"Elasticity matrix = {self.elasticities}\n")
 
+    def estimate_logit(self):
+        """
+        Estimate the logit model as per the specifications of Question 3
+        """
         # Calculate the outside share by market
         outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
 
@@ -320,11 +358,19 @@ class Model:
         Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
         Z = np.concatenate((Z, X[:, 1:]), axis=1)
 
+        # Recover parameters via OLS
         self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside, include_constant=True)[1:]
         print(f"The estimates (logit) = {self.beta_bar_hat}\n")
 
-    def estimate_micro(self, conc_out=False):
+        # Recover elasticities
+        self.elasticities = self.compute_elasticities()
+        print(f"Elasticity matrix = {self.elasticities}\n")
 
+    def estimate_micro(self, conc_out=False):
+        """
+        Estimate the model in question 1
+        :param conc_out: Concentrate out mean indirect utilities using the BLP contraction
+        """
         print("Estimating mean indirect utilities and interactions by MLE...")
 
         # Recover MLE estimates of delta and Gamma
@@ -349,6 +395,10 @@ class Model:
         print(f"The linear parameters are = {self.beta_bar_hat}\n")
 
     def compute_elasticities(self):
+        """
+
+        :return:
+        """
         # Initialize the elasticities
         e = np.zeros((self.data.dims['J'], self.data.dims['J']))
 
@@ -395,6 +445,9 @@ class Model:
 
     # Function to back out marginal costs from the logit data (prices and estimated own-price elasticities)
     def marginal_costs(self):
+        """
+
+        """
         # Initialize marginal cost array
         mc_array = np.zeros((self.data.dims['J'], 1))
 
@@ -411,5 +464,44 @@ class Model:
         print(f"Average marginal costs = {mc_array}\n")
         self.c = mc_array
 
-    def print_esimates(self, filename):
-        pass
+    def print_estimates(self, filename, title, label):
+
+        # Get interaction coefficient names
+        interactions = ["$" +i[0] + " \times " + i[1] + "$" for i in
+                        itertools.product(self.data.model_vars['d'], self.data.model_vars['x_2'])]
+
+        # Get all variable names
+        var_names = ["\emph{Linear parameters}"]
+        var_names.extend(self.data.model_vars['x_1'])
+        var_names.extend(["\emph{Interact hh and prod. char}"])
+        var_names.extend(interactions)
+        var_names.extend(["\emph{Random coefficients}"])
+        random_coeff_names = ["$\gamma_{%i,%i}$" % (i + 1, j + 1) for i, j in
+                              itertools.product(range(self.data.dims['K_3']), range(self.data.dims['K_3']))]
+        var_names.extend(random_coeff_names)
+
+        # Get all data
+        data = [" "]
+        data.extend(["%.2f"%i for i in self.beta_bar_hat])
+        data.extend([" "])
+        data.extend(["%.2f"%i for i in list(self.beta_o_hat.flatten())])
+        data.extend([" "])
+        data.extend(["%.2f"%i for i in list(self.beta_u_hat.flatten())])
+
+        # Make pandas dataframe
+        data_dict = {}
+        data_dict[self.estimatortype.upper()] = data
+        df = pd.DataFrame(data=data_dict,index=var_names)
+        print(df)
+
+        # Print to location
+        df.to_latex(buf=filename,
+                    caption=title, label=label, index=True, escape=False)
+
+
+    def print_elasticities(self, filename, title, label, format_float):
+
+        # Make dataframe out of elasticities
+        df = pd.DataFrame(self.elasticities)
+        df.to_latex(buf=filename, header=[str(j + 1) for j in range(self.data.dims['J'])],
+                    float_format=format_float, caption=title, label=label, index=False)

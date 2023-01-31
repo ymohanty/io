@@ -45,8 +45,10 @@ class Data:
 
     def get_specification(self):
         """
+        Recovers the precise variable names and data based on the specification provided
+        which is one of ('blp','logit','micro')
 
-        :param spec:
+        :param spec: String specifying the specification of the model ('blp','logit','micro')
         """
 
         # The BLP routine from ps1_ex4.csv
@@ -80,7 +82,7 @@ class Data:
 
     def get_metadata(self):
         """
-
+        Recover metadata from the data matrices. Populate dims dictionary.
         """
         # Counts for index variables
         try:
@@ -106,7 +108,7 @@ class Data:
 
     def get_data_matrices(self):
         """
-
+        Convert raw data into matrices corresponding to each variable group.
         """
         # Characteristics with fixed effects
         self.x_1 = self.get_product_char_matrix(self.model_vars["x_1"])
@@ -131,8 +133,10 @@ class Data:
 
     def get_product_char_matrix(self, vars):
         """
+        Get matrices for variables corresponding to product characteristics.
 
-        :param vars:
+        :param vars: Specify the type of product characteristics (i.e x_1, x_2, x_3) based on whether they enter the mean
+        indirect utility, interact with household characteristics, or/and have random coefficients.
         :return:
         """
         data = self.agg_data[vars].to_numpy()
