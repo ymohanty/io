@@ -3,7 +3,6 @@ import model.blpmodel as blpmodel
 import data
 
 
-
 def main():
 
     # Load micro data into data class and estimate
@@ -22,8 +21,6 @@ def main():
     modelobj = blpmodel.Model(dataobj, "gmm")
     modelobj.estimate()
     print(modelobj.compute_elasticities())
-
-
 
 
 if __name__ == '__main__':

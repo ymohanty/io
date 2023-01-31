@@ -36,13 +36,16 @@ class Model:
         # Random taste shocks
         self.nu = self.draw_random_shocks()
 
-        # Initialize all parameter estimates
+        # Initialize all demand parameter estimates
         self.beta = []  # K_1 + D x K_2 + K_3 (K_3 + 1)/2  (All param)
         self.beta_bar_hat = []  # K_1 x 1 (Linear param)
         self.beta_o_hat = []  # D x K_2 (Param on indiv. char) (Gamma in problem 2)
         self.beta_u_hat = []  # K_3 x K_3 (Random coefficients) (Gamma in problem 4)
         self.delta = []  # (T*J x 1)
         self.init_parameter_estimates()
+
+        # Marginal cost estimates
+        self.c = []
 
         # initialize the elasticity matrix
         self.elasticities = []
@@ -168,8 +171,8 @@ class Model:
 
         # Divide to get a T x J x I matrix
         indiv_choice = numer / denom
-        indiv_choice = np.transpose(indiv_choice, (2, 1, 0))[:, :, 0] # (T x J x I) --> (I x J x T)
-        agg_choice = np.nanmean(indiv_choice,axis=0)
+        indiv_choice = np.transpose(indiv_choice, (2, 1, 0))[:, :, 0]  # (T x J x I) --> (I x J x T)
+        agg_choice = np.nanmean(indiv_choice, axis=0)
 
         # Return aggregate or individual choice probabilities
         if agg:
@@ -177,8 +180,7 @@ class Model:
         else:
             return indiv_choice
 
-
-    def get_delta(self, beta_u = [], beta_o = [], noisy=False):
+    def get_delta(self, beta_u=[], beta_o=[], noisy=False):
         """
 
         :param beta_u:
@@ -206,7 +208,7 @@ class Model:
 
         return delta
 
-    def contraction_map(self, delta, beta_u = [], beta_o = []):
+    def contraction_map(self, delta, beta_u=[], beta_o=[]):
 
         if beta_o == []:
             return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
@@ -250,7 +252,7 @@ class Model:
     def mle_objective(self, x, conc_out=False):
 
         if conc_out:
-            beta_o = np.reshape(x,(self.data.dims['D'],self.data.dims['K_2']))
+            beta_o = np.reshape(x, (self.data.dims['D'], self.data.dims['K_2']))
             delta = self.get_delta(beta_o=beta_o)
         else:
             delta = x[:self.data.dims['J']]
@@ -275,6 +277,8 @@ class Model:
                 self.estimate_blp()
             elif self.estimatortype == "2sls":
                 self.estimate_logit()
+
+            self.marginal_costs()
         else:
             self.estimate_micro(conc_out=True)
 
@@ -286,7 +290,7 @@ class Model:
         res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'] + 1)), beta_tilde_init,
                        method='Nelder-Mead', bounds=((0, 10), (-1, 1), (-1, 1)))
         self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D'] * self.data.dims['K_2']:])
-        print(f"The estimates of random coefficients = {self.beta_u_hat}")
+        print(f"The estimates of random coefficients = {self.beta_u_hat}\n")
 
         # 2SLS
         print("Estimating linear parameters...")
@@ -298,7 +302,7 @@ class Model:
         exog_chars = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T'] * self.data.dims['J'], 1))
         Z_with_exog = np.append(Z, exog_chars, 1)
         self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta, include_constant=True)[1:]
-        print(f"The estimates of the linear parameters = {self.beta_bar_hat}")
+        print(f"The estimates of the linear parameters = {self.beta_bar_hat}\n")
 
     def estimate_logit(self):
 
@@ -309,6 +313,7 @@ class Model:
         share_by_outside_good = self.data.s / outside_share
         share_by_outside_good_long = np.reshape(share_by_outside_good, (6000, 1))
         log_shares_outside = np.log(share_by_outside_good_long)
+        self.delta = log_shares_outside
 
         # Vectors of product characteristics and instruments
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
@@ -316,7 +321,7 @@ class Model:
         Z = np.concatenate((Z, X[:, 1:]), axis=1)
 
         self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside, include_constant=True)[1:]
-        print(f"The estimates (logit) = {self.beta_bar_hat}")
+        print(f"The estimates (logit) = {self.beta_bar_hat}\n")
 
     def estimate_micro(self, conc_out=False):
 
@@ -326,24 +331,22 @@ class Model:
         if conc_out:
             x0 = self.beta_o_hat.flatten()
             res = minimize(lambda x: self.mle_objective(x, conc_out=True), x0, method='Nelder-Mead')
-            self.beta_o_hat = np.reshape(res.x,(self.data.dims['D'],self.data.dims['K_2']))
+            self.beta_o_hat = np.reshape(res.x, (self.data.dims['D'], self.data.dims['K_2']))
             self.delta = np.transpose(self.get_delta(beta_o=self.beta_o_hat))
         else:
             x0 = np.concatenate((self.delta.flatten(), self.beta_o_hat.flatten())).ravel()
-            res = minimize(self.mle_objective,x0,method='Nelder-Mead')
+            res = minimize(self.mle_objective, x0, method='Nelder-Mead')
             self.delta = res.x[:self.data.dims['J']]
-            self.beta_o_hat = np.reshape(res.x[self.data.dims['J']:],(self.data.dims['D'],self.data.dims['K_2']))
+            self.beta_o_hat = np.reshape(res.x[self.data.dims['J']:], (self.data.dims['D'], self.data.dims['K_2']))
 
         print(res)
-        print(f"The mean indirect utilities are given delta = {self.delta}")
-        print(f"The interaction parameters are = {self.beta_o_hat}")
+        print(f"The mean indirect utilities are given delta = {self.delta}\n")
+        print(f"The interaction parameters are = {self.beta_o_hat}\n")
 
         # Recover OLS estimates of beta bar
-        print(self.delta.shape)
-        X = np.reshape(self.data.x_1,(self.data.dims['J'],self.data.dims['K_1']))
+        X = np.reshape(self.data.x_1, (self.data.dims['J'], self.data.dims['K_1']))
         self.beta_bar_hat = ols(X, self.delta, include_constant=True)[1:]
-        print(f"The linear parameters are = {self.beta_bar_hat}")
-
+        print(f"The linear parameters are = {self.beta_bar_hat}\n")
 
     def compute_elasticities(self):
         # Initialize the elasticities
@@ -372,17 +375,17 @@ class Model:
                     # Find full elasticities and average over all markets then output into matrix
                     full_elasticity = np.multiply(mean_j_times_k, scaling_factor)
                     average_elasticity = np.nanmean(full_elasticity, 0)
-                    e[j, k] = average_elasticity
+                    e[j, k] = -average_elasticity
                 else:
                     # Find sj * (1 - sj)
                     s_hat_j = s_hat[:, j, :]
                     j_times_one_minus = np.multiply(s_hat_j, 1 - s_hat_j)
-                    mean_j_times_one_minus = np.nanmean(j_times_one_minus)
+                    mean_j_times_one_minus = np.nanmean(j_times_one_minus, 1)
 
                     # Find negative alpha times p_j divided by sj
-                    minus_alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
+                    alpha_p_j = np.multiply(self.beta_bar_hat[0], self.data.x_1[:, j, 0])
                     s_hat_mean_j = s_hat_mean[:, j]
-                    scaling_factor = np.divide(minus_alpha_p_j, s_hat_mean_j)
+                    scaling_factor = np.divide(alpha_p_j, s_hat_mean_j)
 
                     # Find full elasticities and average over all markets then output into matrix
                     full_elasticity = np.multiply(mean_j_times_one_minus, scaling_factor)
@@ -390,4 +393,23 @@ class Model:
                     e[j, k] = average_elasticity
         return e
 
+    # Function to back out marginal costs from the logit data (prices and estimated own-price elasticities)
+    def marginal_costs(self):
+        # Initialize marginal cost array
+        mc_array = np.zeros((self.data.dims['J'], 1))
 
+        # Find average price, shares, and elasticities over all markets
+        for j in range(self.data.dims['J']):
+            average_pj = np.mean(self.data.x_1[:, j, 0], 0)
+            average_sj = np.mean(self.data.s[:, j], 0)
+            average_elast = self.compute_elasticities()[j, j]
+
+            # Set the marginal cost equal to the correct formula.
+            mc_array[j, 0] = average_pj + (average_sj / average_elast)
+
+        # Set marginal cost vector
+        print(f"Average marginal costs = {mc_array}\n")
+        self.c = mc_array
+
+    def print_esimates(self, filename):
+        pass
