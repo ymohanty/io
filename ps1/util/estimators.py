@@ -20,3 +20,18 @@ def iv_2sls(X, Z, Y, include_constant=False, return_X=False):
         return estimator, X
     else:
         return estimator
+
+# Function to compute OLS estimator
+def ols(X, y, include_constant=False, return_X=False):
+
+    if include_constant:
+        X = np.concatenate((np.ones((X.shape[0],1)),X),axis=1)
+
+    XT = np.transpose(X)
+    estimator = np.linalg.inv(XT @ X) @ XT @ y
+
+    if return_X:
+        return estimator, X
+    else:
+        return estimator
+
