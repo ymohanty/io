@@ -411,5 +411,65 @@ class Model:
         print(f"Average marginal costs = {mc_array}\n")
         self.c = mc_array
 
+    def counterfactuals_logit(self):
+        # Set parameters
+        one_over_alpha = -1/self.beta_bar_hat[0]
+        tolerance = 1e-6
+        n_j = self.data.dims['J']
+        shares_new = np.zeros((self.data.dims['T']*n_j, 1))
+        prices_new = np.reshape(self.data.x_1[:, :, 0], (self.data.dims['T']*n_j, 1))
+        numerator = np.zeros(n_j - 1)
+        differences = np.zeros(n_j - 1)
+        diff = np.repeat(np.inf, self.data.dims['T'])
+        niter = 1
+
+        # Make xi's
+        x_1_beta_wide = np.matmul(self.data.x_1, self.beta_bar_hat)
+        x_1_beta_long = np.reshape(x_1_beta_wide, (self.data.dims['T']*n_j, 1))
+        xi = self.delta - x_1_beta_long
+
+        # Make a long version of x
+        x_long = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T']*n_j, 1))
+
+        # Find profits and welfare before
+        profits_pre = np.zeros(n_j)
+        for i in range(n_j):
+            profits_pre[i] = np.nanmean(self.data.s, 0)[i] * (np.nanmean(self.data.x_1[:, :, 0], 0)[i] - self.c[i, 0])
+
+        welfare_pre = 0.577 - np.log(1 - sum(np.nanmean(self.data.s, 0)))
+
+        # Loop over all 1000 markets
+        for t in range(self.data.dims['T']):
+            #print(t)
+            while diff[t] > tolerance and niter < 10000:
+                #print(niter)
+                for i in range(n_j - 1):
+                    # Find the numerator for all goods except good 1 (coded 0 in data)
+                    numerator[i] = np.exp(self.beta_bar_hat[0]*prices_new[n_j*t+i+1, 0] + self.beta_bar_hat[1]*x_long[n_j*t+i+1, 0] + xi[n_j*t+i+1, 0])
+                for i in range(n_j - 1):
+                    shares_new[n_j*t+i+1] = numerator[i] / (sum(numerator) + 1)
+                    newprice = self.c[i+1, 0] + one_over_alpha + shares_new[n_j*t+i+1]*(prices_new[n_j*t+i+1] - self.c[i+1, 0])
+                    differences[i] = abs(prices_new[n_j*t+i+1] - newprice)
+                    prices_new[n_j*t+i+1] = newprice
+                diff[t] = max(differences)
+                niter += 1
+        prices_new_reshape = np.reshape(prices_new, (self.data.dims['T'], n_j))
+        shares_new_reshape = np.reshape(shares_new, (self.data.dims['T'], n_j))
+        print(np.nanmean(prices_new_reshape, 0))
+        print(np.nanmean(shares_new_reshape, 0))
+
+        # Find profits and welfare after
+        profits_post = np.zeros(n_j)
+        for i in range(n_j):
+            profits_post[i] = np.nanmean(shares_new_reshape, 0)[i] * (np.nanmean(prices_new_reshape, 0)[i] - self.c[i, 0])
+
+        welfare_post = 0.577 - np.log(1 - sum(np.nanmean(shares_new_reshape, 0)))
+
+        # Change in profits and welfare
+        profits_change = profits_post - profits_pre
+        welfare_change = welfare_post - welfare_pre
+        print(profits_change)
+        print(welfare_change)
+
     def print_esimates(self, filename):
         pass

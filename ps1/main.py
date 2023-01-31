@@ -16,6 +16,9 @@ def main():
     modelobj.estimate()
     print(f"Elasticity matrix = {modelobj.compute_elasticities()}\n")
 
+    # Do counterfactuals
+    modelobj.counterfactuals_logit()
+
     # Load blp data into data class and estimate
     dataobj = blpdata.Data(data.BLP_DATA_LOC, spec="blp", add_outside_good=False)
     modelobj = blpmodel.Model(dataobj, "gmm")
