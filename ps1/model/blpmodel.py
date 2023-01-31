@@ -2,9 +2,8 @@ import numpy as np
 from util.estimators import iv_2sls, ols
 from util.utilities import get_lower_triangular
 from scipy.optimize import minimize
-
-
-# from util import
+import pandas as pd
+import itertools
 
 
 class Model:
@@ -95,7 +94,7 @@ class Model:
 
     def draw_random_shocks(self):
         """
-
+        Draw random coefficients from a standard normal distribution.
         """
         return self.estimopts['stream'].standard_normal((self.data.dims['K_3'], self.estimopts['num_sim']))
 
@@ -182,11 +181,12 @@ class Model:
 
     def get_delta(self, beta_u=[], beta_o=[], noisy=False):
         """
+        Recover the mean indirect utilities as a function of non-linear parameters
 
-        :param beta_u:
-        :param beta_o:
-        :param noisy:
-        :return:
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :param noisy: Switch to show convergence status and number of iterations
+        :return: (T x J) matrix of mean indirect utilities
         """
         diff = np.inf
         niter = 1
@@ -209,14 +209,26 @@ class Model:
         return delta
 
     def contraction_map(self, delta, beta_u=[], beta_o=[]):
+        """
+        One iteration of the standard contraction map from BLP'95
 
+        :param delta: (T x J) matrix of mean indirect utilities
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :return: (T x J) matrix of mean indirect utilities
+        """
         if beta_o == []:
             return delta + np.log(self.data.s) - np.log(self.get_model_market_shares(delta, beta_u))
         else:
             return delta + np.log(self.data.s) - np.log(self.get_indiv_choice_prob(delta, beta_o, agg=True))
 
     def get_moments(self, beta_u, W):
+        """
 
+        :param beta_u:
+        :param W:
+        :return:
+        """
         # Recover linear parameters as a function of non-linear parameters via 2SLS
         delta = np.reshape(self.get_delta(beta_u), (self.data.dims['T'] * self.data.dims['J'], 1))
         X = np.reshape(self.data.x_1, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['K_1']))
@@ -235,7 +247,13 @@ class Model:
         return Q.flatten()[0]
 
     def get_likelihood(self, delta, beta_o):
+        """
+        Evalualte the negative of the log-likelihood function
 
+        :param delta: (I x J) matrix of mean indirect utilities
+        :param beta_o: (D x K_2) matrix of interactions between prod. and hh. characteristics
+        :return: Negative of the log-likelihood
+        """
         # Get individual choice probabilities
         prob_chosen_alt = np.zeros((self.data.dims['I'], 1))
         prob_all = self.get_indiv_choice_prob(delta, beta_o)
@@ -251,6 +269,13 @@ class Model:
 
     def mle_objective(self, x, conc_out=False):
 
+        """
+        The objective function for the MLE optimization routine
+
+        :param x: Vector of parameters. Depends on whether we concentrate out mean indirect utilities
+        :param conc_out: Switch to concentrate out mean indirect utilities
+        :return: Likelihood function evaluated at (delta, beta_o) unpacked from x
+        """
         if conc_out:
             beta_o = np.reshape(x, (self.data.dims['D'], self.data.dims['K_2']))
             delta = self.get_delta(beta_o=beta_o)
@@ -261,13 +286,21 @@ class Model:
 
     # Should we also pass a weighting matrix?
     def blp_objective(self, beta_u, W):
+        """
+        Objective function for the BLP optimization routine
 
+        :param beta_u: (K_3 x K_3) matrix of random coefficients
+        :param W: (Z x Z) weighting matrix for GMM
+        :return: scalar gmm objective
+        """
         # Break up parameter vector
         beta_u = get_lower_triangular(beta_u)
         return self.get_moments(beta_u, W)
 
     def estimate(self):
-
+        """
+        Wrapper for estimation routines
+        """
         # No need to do two-step since
         # we are not reporting std. errors
         if self.modeltype == "blp":
@@ -283,12 +316,14 @@ class Model:
             self.estimate_micro(conc_out=True)
 
     def estimate_blp(self):
-
+        """
+        Estimate the BLP model as per the specifcations of Question 2
+        """
         # GMM
         print("Estimating non-linear parameters...")
         beta_tilde_init = self.beta[self.data.dims['K_1']:]
         res = minimize(lambda x: self.blp_objective(x, np.eye(self.data.dims['Z'] + 1)), beta_tilde_init,
-                       method='Nelder-Mead', bounds=((0, 10), (-1, 1), (-1, 1)))
+                       method='Nelder-Mead')
         self.beta_u_hat = get_lower_triangular(res.x[self.data.dims['D'] * self.data.dims['K_2']:])
         print(f"The estimates of random coefficients = {self.beta_u_hat}\n")
 
@@ -304,8 +339,14 @@ class Model:
         self.beta_bar_hat = iv_2sls(X, Z_with_exog, self.delta, include_constant=True)[1:]
         print(f"The estimates of the linear parameters = {self.beta_bar_hat}\n")
 
-    def estimate_logit(self):
+        # Recover elasticities
+        self.elasticities = self.compute_elasticities()
+        print(f"Elasticity matrix = {self.elasticities}\n")
 
+    def estimate_logit(self):
+        """
+        Estimate the logit model as per the specifications of Question 3
+        """
         # Calculate the outside share by market
         outside_share = 1 - self.data.s.sum(axis=1, keepdims=True)
 
@@ -320,11 +361,19 @@ class Model:
         Z = np.reshape(self.data.z, (self.data.dims['T'] * self.data.dims['J'], self.data.dims['Z']))
         Z = np.concatenate((Z, X[:, 1:]), axis=1)
 
+        # Recover parameters via OLS
         self.beta_bar_hat = iv_2sls(X, Z, log_shares_outside, include_constant=True)[1:]
         print(f"The estimates (logit) = {self.beta_bar_hat}\n")
 
-    def estimate_micro(self, conc_out=False):
+        # Recover elasticities
+        self.elasticities = self.compute_elasticities()
+        print(f"Elasticity matrix = {self.elasticities}\n")
 
+    def estimate_micro(self, conc_out=False):
+        """
+        Estimate the model in question 1
+        :param conc_out: Concentrate out mean indirect utilities using the BLP contraction
+        """
         print("Estimating mean indirect utilities and interactions by MLE...")
 
         # Recover MLE estimates of delta and Gamma
@@ -349,6 +398,11 @@ class Model:
         print(f"The linear parameters are = {self.beta_bar_hat}\n")
 
     def compute_elasticities(self):
+        """
+        Recover matrix of own and cross price elasticities averaged by market
+
+        :return: (JxJ) matrix of elasticities
+        """
         # Initialize the elasticities
         e = np.zeros((self.data.dims['J'], self.data.dims['J']))
 
@@ -395,6 +449,11 @@ class Model:
 
     # Function to back out marginal costs from the logit data (prices and estimated own-price elasticities)
     def marginal_costs(self):
+        """
+        Recover marginal costs from demand estimates using the pricing euqation derived via the Bertrand pricing
+        game.
+
+        """
         # Initialize marginal cost array
         mc_array = np.zeros((self.data.dims['J'], 1))
 
@@ -413,11 +472,11 @@ class Model:
 
     def counterfactuals_logit(self):
         # Set parameters
-        one_over_alpha = -1/self.beta_bar_hat[0]
+        one_over_alpha = -1 / self.beta_bar_hat[0]
         tolerance = 1e-6
         n_j = self.data.dims['J']
-        shares_new = np.zeros((self.data.dims['T']*n_j, 1))
-        prices_new = np.reshape(self.data.x_1[:, :, 0], (self.data.dims['T']*n_j, 1))
+        shares_new = np.zeros((self.data.dims['T'] * n_j, 1))
+        prices_new = np.reshape(self.data.x_1[:, :, 0], (self.data.dims['T'] * n_j, 1))
         numerator = np.zeros(n_j - 1)
         differences = np.zeros(n_j - 1)
         diff = np.repeat(np.inf, self.data.dims['T'])
@@ -425,11 +484,11 @@ class Model:
 
         # Make xi's
         x_1_beta_wide = np.matmul(self.data.x_1, self.beta_bar_hat)
-        x_1_beta_long = np.reshape(x_1_beta_wide, (self.data.dims['T']*n_j, 1))
+        x_1_beta_long = np.reshape(x_1_beta_wide, (self.data.dims['T'] * n_j, 1))
         xi = self.delta - x_1_beta_long
 
         # Make a long version of x
-        x_long = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T']*n_j, 1))
+        x_long = np.reshape(self.data.x_1[:, :, 1], (self.data.dims['T'] * n_j, 1))
 
         # Find profits and welfare before
         profits_pre = np.zeros(n_j)
@@ -440,17 +499,20 @@ class Model:
 
         # Loop over all 1000 markets
         for t in range(self.data.dims['T']):
-            #print(t)
+            # print(t)
             while diff[t] > tolerance and niter < 10000:
-                #print(niter)
+                # print(niter)
                 for i in range(n_j - 1):
                     # Find the numerator for all goods except good 1 (coded 0 in data)
-                    numerator[i] = np.exp(self.beta_bar_hat[0]*prices_new[n_j*t+i+1, 0] + self.beta_bar_hat[1]*x_long[n_j*t+i+1, 0] + xi[n_j*t+i+1, 0])
+                    numerator[i] = np.exp(
+                        self.beta_bar_hat[0] * prices_new[n_j * t + i + 1, 0] + self.beta_bar_hat[1] * x_long[
+                            n_j * t + i + 1, 0] + xi[n_j * t + i + 1, 0])
                 for i in range(n_j - 1):
-                    shares_new[n_j*t+i+1] = numerator[i] / (sum(numerator) + 1)
-                    newprice = self.c[i+1, 0] + one_over_alpha + shares_new[n_j*t+i+1]*(prices_new[n_j*t+i+1] - self.c[i+1, 0])
-                    differences[i] = abs(prices_new[n_j*t+i+1] - newprice)
-                    prices_new[n_j*t+i+1] = newprice
+                    shares_new[n_j * t + i + 1] = numerator[i] / (sum(numerator) + 1)
+                    newprice = self.c[i + 1, 0] + one_over_alpha + shares_new[n_j * t + i + 1] * (
+                                prices_new[n_j * t + i + 1] - self.c[i + 1, 0])
+                    differences[i] = abs(prices_new[n_j * t + i + 1] - newprice)
+                    prices_new[n_j * t + i + 1] = newprice
                 diff[t] = max(differences)
                 niter += 1
         prices_new_reshape = np.reshape(prices_new, (self.data.dims['T'], n_j))
@@ -461,7 +523,8 @@ class Model:
         # Find profits and welfare after
         profits_post = np.zeros(n_j)
         for i in range(n_j):
-            profits_post[i] = np.nanmean(shares_new_reshape, 0)[i] * (np.nanmean(prices_new_reshape, 0)[i] - self.c[i, 0])
+            profits_post[i] = np.nanmean(shares_new_reshape, 0)[i] * (
+                        np.nanmean(prices_new_reshape, 0)[i] - self.c[i, 0])
 
         welfare_post = 0.577 - np.log(1 - sum(np.nanmean(shares_new_reshape, 0)))
 
@@ -473,3 +536,66 @@ class Model:
 
     def print_esimates(self, filename):
         pass
+
+    def print_estimates(self, filename, title, label):
+        """
+        Print estimates from the model into a latex file
+
+        :param filename: Path to file output
+        :param title: Caption for table
+        :param label: Label for table
+        """
+        # Get interaction coefficient names
+        interactions = ["$" + i[0] + " \times " + i[1] + "$" for i in
+                        itertools.product(self.data.model_vars['d'], self.data.model_vars['x_2'])]
+
+        # Get all variable names
+        var_names = ["\emph{Linear parameters}"]
+        var_names.extend(self.data.model_vars['x_1'])
+        var_names.extend(["\emph{Interact hh and prod. char}"])
+        var_names.extend(interactions)
+        var_names.extend(["\emph{Random coefficients}"])
+        random_coeff_names = ["$\gamma_{%i,%i}$" % (i + 1, j + 1) for i, j in
+                              itertools.product(range(self.data.dims['K_3']), range(self.data.dims['K_3']))]
+        var_names.extend(random_coeff_names)
+
+        # Get all data
+        data = [" "]
+        data.extend(["%.2f" % i for i in self.beta_bar_hat])
+        data.extend([" "])
+        data.extend(["%.2f" % i for i in list(self.beta_o_hat.flatten())])
+        data.extend([" "])
+        data.extend(["%.2f" % i for i in list(self.beta_u_hat.flatten())])
+
+        # Make pandas dataframe
+        data_dict = {}
+        data_dict[self.estimatortype.upper()] = data
+        df = pd.DataFrame(data=data_dict, index=var_names)
+        print(df)
+
+        # Print to location
+        df.to_latex(buf=filename,
+                    caption=title, label=label, index=True, escape=False)
+
+    def print_elasticities(self, filename, title, label, format_float):
+        """
+        Print latex table of elasticities to disk.
+
+        :param filename: Path to output
+        :param title: Title for latex table
+        :param label: Label for latex table
+        :param format_float: Format strings to correctly format table entries
+        """
+        # Make dataframe out of elasticities
+        df = pd.DataFrame(self.elasticities)
+        df.to_latex(buf=filename, header=[str(j + 1) for j in range(self.data.dims['J'])],
+                    float_format=format_float, caption=title, label=label, index=False)
+
+    def print_averages(self, filename, title, label, format_float):
+
+        if self.data.spec == "blp":
+            x_1 = np.nanmean(self.data.x_1, axis=0)
+            s = np.transpose(np.nanmean(self.data.s, axis=0))
+            data = {"Price": x_1[:, 0], "Quality": x_1[:, 1], "Share": s}
+            df = pd.DataFrame(data)
+            df.to_latex(buf=filename, float_format=format_float, caption=title, label=label, index=False)
