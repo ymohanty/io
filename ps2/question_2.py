@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 
-def generate_data(T, filename="ps2q2.csv"):
+def generate_data(T, filename="data/ps2q2.csv"):
     """
     Simulate entry data in T markets
 
