@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+# Virutal environments
+ps2/io_ps2/
+
 # Distribution / packaging
 .Python
 build/
@@ -57,6 +60,7 @@ coverage.xml
 
 # Django stuff:
 *.log
+*.errlog
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -70,6 +74,9 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+
+# PDF
+*.pdf
 
 # PyBuilder
 target/
@@ -87,6 +94,7 @@ ipython_config.py
 # Mac and IntellIJ  misc
 .DS_Store
 ps1/.idea/
+ps2/.idea/
 .idea/
 *.xml
 *.iml
