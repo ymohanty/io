@@ -3,20 +3,24 @@ import numpy as np
 import pandas as pd
 from util import flatten
 import matplotlib.pyplot as plt
+from scipy.optimize import minimize
+import itertools
 
 
 class Model:
 
-    def __init__(self, filename):
+    def __init__(self, filename="data/ps2q2.csv", seed=1950):
         """
         Initialize the model object
 
-        :param filename:
+        :param filename: Path to data file
         """
         # Data
         self.data = pd.read_csv(filename)
         self.dims = self.get_data_dims()
-        print(self.dims)
+
+        # Seed
+        self.seed = seed
 
         # Data matrices
         self.x_t = []  # (1 x T) vector of market characteristics
@@ -31,12 +35,7 @@ class Model:
         self.draw_shocks()
 
         # Parameters (initialized to true values)
-        self.alpha = 1
-        self.beta = 2
-        self.delta = 6
-        self.gamma = 3
-        self.rho = 0.8
-        self.theta = [self.alpha, self.beta, self.delta, self.gamma, self.rho]
+        self.theta = [1, 2, 6, 3, 0.8]
 
     def get_data_dims(self):
         """
@@ -48,7 +47,7 @@ class Model:
         dims = {}
         dims['T'] = self.data['t'].nunique()
         dims['K'] = self.data['i'].nunique()
-        dims['S'] = 100
+        dims['S'] = 150
 
         return dims
 
@@ -69,7 +68,7 @@ class Model:
         Draw iid shocks for the simulation.
         """
         # Set seed
-        rng = np.random.default_rng(1950)
+        rng = np.random.default_rng(self.seed)
 
         # Set firm-market shocks
         self.eps_it = rng.normal(0, 1, (self.dims['K'], self.dims['T'], self.dims['S']))
@@ -77,14 +76,22 @@ class Model:
         # Market level shocks
         self.eta_t = rng.normal(0, 1, (1, self.dims['T'], self.dims['S']))
 
-    def compute_moments(self, theta):
+    def compute_moments(self, theta, interact='none'):
         """
         Get the quadratic form of the empirical moments
 
         :param theta: List of parameters
+        :param interact: String describing the type of moment condition i.e. f(z_it,x_) = {1, z_it, z_it x_t}
         :return: Value of objective
         """
-        G = (self.I_it - self.prob_entry(theta))  * self.z_it
+        if interact == 'none':
+            G = (self.I_it - self.prob_entry(theta))
+        elif interact == 'z':
+            G = (self.I_it - self.prob_entry(theta)) * self.z_it
+        elif interact == 'zx':
+            G = (self.I_it - self.prob_entry(theta)) * self.z_it * self.x_t
+        else:
+            raise ValueError(f"Model type not recognized: {type}")
         mean_G = np.mean(G, axis=1)
         Q = np.matmul(np.transpose(mean_G), mean_G)
 
@@ -98,7 +105,6 @@ class Model:
         :param theta: List of parameters
         :return: Pr{Iit(θ, xt, zt)|xt, zt} probabilities of entry (K x T)
         """
-
         # Compute idiosyncratic profits and sort within markets
         # from highest to lowest
         phi_it = self.phi_it(theta)
@@ -134,51 +140,137 @@ class Model:
         :param theta: List of parameters
         :return: fixed profits (K x T x S)
         """
-
         return self.z_it[..., None] * theta[0] + theta[4] * self.eta_t + np.sqrt(1 - theta[4] ** 2) * self.eps_it
 
-    def get_objective(self,type='all'):
+    def get_objective(self, param='all', interact='none'):
         """
         Compute the objective function as a partial function of one out of the five parameters
 
-        :param type: String specifying the parameter which is allowed to vary; others fixed at true values.
+        :param param: String specifying the parameter which is allowed to vary; others fixed at true values.
         :return: The objective function as the function of the parameter allowed to vary.
         """
-        if type == 'all':
-            return self.compute_moments
-        elif type == 'alpha':
-            return lambda x: self.compute_moments(flatten([x, self.theta[1:]]))
-        elif type == 'beta':
-            return lambda x: self.compute_moments(flatten([self.theta[0], x, self.theta[2:]]))
-        elif type == 'delta':
-            return lambda x: self.compute_moments(flatten([self.theta[0:2], x, self.theta[3:]]))
-        elif type == 'gamma':
-            return lambda x: self.compute_moments(flatten([self.theta[0:3], x, self.theta[4]]))
-        elif type == 'rho':
-            return lambda x: self.compute_moments(flatten([self.theta[:4], x]))
+        if param == 'all':
+            return lambda x: self.compute_moments(x, interact=interact)
+        elif param == 'alpha':
+            return lambda x: self.compute_moments(flatten([x, self.theta[1:]]), interact=interact)
+        elif param == 'beta':
+            return lambda x: self.compute_moments(flatten([self.theta[0], x, self.theta[2:]]), interact=interact)
+        elif param == 'delta':
+            return lambda x: self.compute_moments(flatten([self.theta[0:2], x, self.theta[3:]]), interact=interact)
+        elif param == 'gamma':
+            return lambda x: self.compute_moments(flatten([self.theta[0:3], x, self.theta[4]]), interact=interact)
+        elif param == 'rho':
+            return lambda x: self.compute_moments(flatten([self.theta[:4], x]), interact=interact)
         else:
-            raise ValueError(f"Uknown type: {type}")
+            raise ValueError(f"Unknown type: {param}")
 
-    def plot_objective(self, type, filename=""):
+    def plot_objective(self, param, interact=['none', 'z', 'zx'], filename=""):
+        """
+        Plot the objective function as a function of one of the parameters, holding the other
+        parameters fixed at their true values.
 
-        values = {'alpha':np.linspace(-5,5,50),
-                  'beta':np.linspace(-5,5,50),
-                  'delta':np.linspace(0,12,100),
-                  'gamma':np.linspace(0,5,50),
-                  'rho':np.linspace(0,1,100)}
-        objective = self.get_objective(type)
-        x = values[type]
-        y = [objective(t) for t in x]
-        plt.plot(x,y)
-        plt.ylabel("Objective")
-        plt.xlabel(f"$\{type}$")
+        :param interact:
+        :param param: String describing the parameter to let vary
+        :param filename: Path to save figure
+        """
+
+        # Collect figure metadata
+        values = {'alpha': (np.linspace(-2.5, 2.5, 50), 0),
+                  'beta': (np.linspace(1, 3, 50), 1),
+                  'delta': (np.linspace(4, 8, 100), 2),
+                  'gamma': (np.linspace(2, 4, 50), 3),
+                  'rho': (np.linspace(0, 1, 100), 4)}
+        interact_map = {'none': ('$f(z_{it},x_t) = 1$', 'solid', 'black'),
+                        'z': ('$f(z_{it},x_t) = z_{it}$', 'dotted', 'blue'),
+                        'zx': ('$f(z_{it},x_t) = z_{it}x_t$', 'dashed', 'green')
+                        }
+
+        # Draw plots
+        x = values[param][0]
+        ymax = []
+        ymin = []
+        for i in interact:
+            obj = self.get_objective(param=param, interact=i)
+            y = [obj(val) for val in x]
+            ymax.append(max(y))
+            ymin.append(min(y))
+            plt.plot(x, y, label=interact_map[i][0], linestyle=interact_map[i][1], color=interact_map[i][2])
+
+        # Labels
+        plt.ylabel("$\hat{Q}(\%s; \\theta_0)$" % param)
+        plt.xlabel(f"$\{param}$")
+        plt.legend()
+
+        # Add vertical line at true value
+        plt.axvline(x=self.theta[values[param][1]], color='red', linestyle='--')
+        plt.text(x=self.theta[values[param][1]] + (max(x) - min(x)) / 20, y=(max(ymax) + min(ymin)) / 2,
+                 s=f"$\{param}^* = {self.theta[values[param][1]]}$", color='red')
+
+        # Save file
         if filename == "":
-            plt.savefig(fname=f"figures/objective_param_{type}.pdf")
+            plt.savefig(fname=f"figures/objective_param_{param}.pdf")
+            print(f"Saving image to 'figures/objective_param_{param}.pdf'")
         else:
             plt.savefig(filename)
+            print(f"Saving figure to {filename}")
         plt.close()
 
+    def estimate(self, init, interact):
+        """
+        Estimate the parameters of the Berry (1992) model.
 
+        :param interact:
+        :param init: List of initial parameter guesses
+        """
+        # Recover the objective function
+        print(f"Estimating parameters using the Nelder-Mead method with initial conditions = {init} and seed = {self.seed}")
+        obj = self.get_objective(param='all', interact=interact)
+        res = minimize(obj, x0=init, method='Nelder-Mead')
+        self.theta = res.x
+
+
+def hist_estimates(type='sim', interact='z'):
+    """
+
+    :param type:
+    :param interact:
+    """
+    # Histogram of estimates based on different seed values but fixied initial guess
+    est = []
+    if type == 'sim':
+        init = [1.5, 2.5, 7, 4, 0.5]
+        seeds = range(1950, 2000)
+        for seed in seeds:
+            model = Model(seed=seed)
+            model.estimate(init=init, interact=interact)
+            est.append(model.theta)
+
+    # Histogram of estimates based on different initial guesses but fixed seed
+    elif type == 'init':
+        alpha = flatten(np.linspace(-2.5, 2.5, 3).tolist())
+        beta = flatten(np.linspace(1, 3, 3).tolist())
+        delta = flatten(np.linspace(4, 8, 2).tolist())
+        gamma = flatten(np.linspace(2, 5, 2).tolist())
+        rho = flatten(np.linspace(0.7, 0.9, 2).tolist())
+        init = itertools.product(alpha, beta, delta, gamma, rho)
+        seed = 1950
+        for val in init:
+            model = Model(seed=seed)
+            model.estimate(init=list(val), interact=interact)
+            est.append(model.theta)
+    else:
+        raise ValueError(f'Interaction code not recognized: {interact}')
+
+    # Prep data for histogram
+    est = np.array(est)
+    params = ['alpha', 'beta', 'delta', 'gamma', 'rho']
+    for i in range(len(params)):
+        x = flatten(est[:, i].tolist())
+        plt.hist(x)
+        plt.xlabel("$\hat{\%s}$" % params[i])
+        plt.savefig(f'figures/hist_est_{params[i]}_{type}_{interact}.pdf')
+        print(f"Saving figure to figures/hist_est_{params[i]}_{type}_{interact}.pdf'...")
+        plt.close()
 
 
 def generate_data(T=100, filename="data/ps2q2.csv"):
@@ -186,6 +278,8 @@ def generate_data(T=100, filename="data/ps2q2.csv"):
     Simulate entry data in T markets
 
     :param T: Number of markets
+    :param filename: Path to file
+    :return: Pandas dataframe containing data
     """
 
     # Define function to recover equilibrium entrants
@@ -268,12 +362,24 @@ def generate_data(T=100, filename="data/ps2q2.csv"):
 
 if __name__ == '__main__':
     # Generate and store data
-    generate_data(150, "data/ps2q2.csv")
+    generate_data(200)
 
-    # Create model object
-    model = Model("data/ps2q2.csv")
-    model.plot_objective('alpha')
-    model.plot_objective('beta')
-    model.plot_objective('delta')
-    model.plot_objective('gamma')
-    model.plot_objective('rho')
+    # Specify moment types
+    interactions = ['none', 'z', 'zx']
+
+    for i in interactions:
+        # Create model object
+        model = Model("data/ps2q2.csv")
+
+        # Plot objective function
+        model.plot_objective(param='alpha',interact=[i],filename=f'figures/fig_obj_param_alpha_{i}.pdf')
+        model.plot_objective(param='beta', interact=[i], filename=f'figures/fig_obj_param_beta_{i}.pdf')
+        model.plot_objective(param='delta', interact=[i], filename=f'figures/fig_obj_param_delta_{i}.pdf')
+        model.plot_objective(param='gamma', interact=[i], filename=f'figures/fig_obj_param_gamma_{i}.pdf')
+        model.plot_objective(param='rho', interact=[i], filename=f'figures/fig_obj_param_rho_{i}.pdf')
+
+        # Estimate parameters
+        hist_estimates(type='sim', interact=i)
+        hist_estimates(type='init', interact=i)
+
+
