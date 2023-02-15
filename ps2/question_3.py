@@ -101,9 +101,15 @@ def main():
 
     # Make transition matrices
     trans_repair = transition_matrix(data_array, 20, decision_array, replacement=False)
-    #print(trans_repair)
     trans_replaced = transition_matrix(data_array, 20, decision_array, replacement=True)
-    #print(trans_replaced)
+
+    # Convert transition matrices to latex
+    trans_repair_df = pd.DataFrame(data=trans_repair)
+    trans_repair_df.to_latex(buf=data._OUT_PATH + '/trans_matrix_repair.tex', caption='Transition Matrix for d=0',
+                             label='tab:trans0', index=True, escape=False, float_format="%.1f")
+    trans_replaced_df = pd.DataFrame(data=trans_replaced)
+    trans_replaced_df.to_latex(buf=data._OUT_PATH + '/trans_matrix_replaced.tex', caption='Transition Matrix for d=1',
+                             label='tab:trans1', index=True, escape=False, float_format="%.1f")
 
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)

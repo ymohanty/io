@@ -4,3 +4,6 @@ from pathlib import Path
 _DATA_PATH = Path(__file__).resolve().parent
 DATA_LOC = str(_DATA_PATH / 'ps2_ex1.csv')
 DATA_LOC_3 = str(_DATA_PATH / 'ps2_ex3.csv')
+
+# Output paths
+_OUT_PATH = str( Path(__file__).resolve().parent.parent / 'tables')
