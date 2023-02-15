@@ -78,6 +78,16 @@ def transition_matrix(x, k, d, replacement = True):
                 matrix_return[i] = matrix[i] / matrix[i].sum(keepdims=True)
         return matrix_return
 
+# Function to compute utility
+def utility(x, d, theta):
+    utility = np.zeros(x.shape)
+    for i in range(np.size(x, 0)):
+        if d[i, 0] == 0:
+            utility[i, 0] = -theta[0]*x[i, 0] - theta[1]*(x[i, 0]/100)**2
+        if d[i, 0] == 1:
+            utility[i, 0] = -theta[2]
+    return utility
+
 def main():
     # Read in data and convert to arrays
     raw_data = pd.read_csv(data.DATA_LOC_3)
@@ -94,6 +104,10 @@ def main():
     #print(trans_repair)
     trans_replaced = transition_matrix(data_array, 20, decision_array, replacement=True)
     #print(trans_replaced)
+
+    # Discretize x
+    bins = np.linspace(0, np.amax(data_array), num=20)
+    discrete_x = np.digitize(data_array, bins)
 
 if __name__ == '__main__':
     main()
