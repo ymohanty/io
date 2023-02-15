@@ -90,6 +90,7 @@ ipython_config.py
 # Mac and IntellIJ  misc
 .DS_Store
 ps1/.idea/
+ps2/.idea/
 .idea/
 *.xml
 *.iml
