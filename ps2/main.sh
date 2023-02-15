@@ -108,8 +108,8 @@ home="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 
 # Check if figures folder exists
-if [ ! -d "${project_root}/analysis/output/figures" ]; then 
-    mkdir "${project_root}/analysis/output/figures"
+if [ ! -d "${home}/figures" ]; then 
+    mkdir "${home}/figures"
 fi
 
 ################################ CLEAR THE OUTPUT-SPACE ###########################
