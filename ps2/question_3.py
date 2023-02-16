@@ -108,30 +108,33 @@ def contraction(EV, beta, x, theta, trans_matrix, noisy=True):
 
 
 def get_value_function(theta, beta, x, trans_matrix, noisy=True):
-
     diff = np.inf
     niter = 1
-    EV = np.zeros(20,2)
+    EV = np.zeros(20, 2)
     while diff > 1e-13 and niter < 1000:
         old_EV = EV
-        EV[:,0] = contraction(old_EV, beta, x, theta, trans_matrix[:,:,0])
-        EV[:,1] = contraction(old_EV, beta, x, theta, trans_matrix[:,:,1])
+        EV[:, 0] = contraction(old_EV, beta, x, theta, trans_matrix[:, :, 0])
+        EV[:, 1] = contraction(old_EV, beta, x, theta, trans_matrix[:, :, 1])
 
         diff = np.amax(np.abs(EV - old_EV))
 
     if noisy:
         print(f"Num. iteratates: {niter}")
         print(f"Diff: {diff}")
-        print("Convergence success: %s" %(diff < 1e-13))
+        print("Convergence success: %s" % (diff < 1e-13))
 
     return EV
 
+
 def ccp(x, d, theta, beta, trans_matrix):
     x_pass = np.arange(0, 20)
-    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x, d])/(np.sum(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)), 1)))
+    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x.tolist(), d.tolist()]) / (
+        np.sum(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)), 1)))
+
 
 def log_likelihood(x, d, theta, beta, trans_matrix):
-    return np.sum(d*ccp(x, d, theta, beta, trans_matrix) + (1-d)*ccp(x, d, theta, beta, trans_matrix), 0)
+    return np.sum(d * ccp(x, d, theta, beta, trans_matrix) + (1 - d) * ccp(x, d, theta, beta, trans_matrix), 0)
+
 
 def main():
     # Read in data and convert to arrays
@@ -157,8 +160,7 @@ def main():
                                label='tab:trans1', index=True, escape=False, float_format="%.1f")
 
     # Combine transition matrix
-    trans_matrix = np.stack(trans_repair, trans_replaced)
-    print(trans_matrix.shape)
+    trans_matrix = np.stack([trans_repair, trans_replaced], axis=2)
 
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)
@@ -167,8 +169,6 @@ def main():
     test = np.arange(1, 21)
     test_2 = np.reshape(test, (20, 1))
     # print(test_2)
-
-
 
 
 if __name__ == '__main__':
