@@ -174,7 +174,7 @@ if [ "$stage" -eq 1 ]; then
     fi
 
     # Execute
-    python question_1.py 2> ./logs/question_1.errlog
+    python question_1.py 2> ./logs/question_1.errlog &
     wait
     handle_error "Error" "$(pwd)/logs/question_1.errlog"
 
@@ -202,7 +202,7 @@ if [ "$stage" -eq 2 ]; then
     fi
 
     # Execute
-    python question_2.py 2> ./logs/question_2.errlog
+    python question_2.py 2> ./logs/question_2.errlog &
     wait
     handle_error "Error" "$(pwd)/logs/question_2.errlog"
 
@@ -230,7 +230,7 @@ if [ "$stage" -eq 3 ]; then
     fi
 
     # Execute
-    python question_2.py 2> ./logs/question_2.errlog
+    python question_2.py 2> ./logs/question_2.errlog &
     wait
     handle_error "Error" "$(pwd)/logs/question_3.errlog"
 
