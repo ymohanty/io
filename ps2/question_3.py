@@ -101,7 +101,7 @@ def utility(x, d, theta):
     return utility
 
 
-# Function to compute right hand side of fixed point
+# Contraction map
 def contraction(EV, beta, x, theta, trans_matrix, noisy=True):
     return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta) + beta * EV)
                                           + np.exp(utility(x, np.ones(x.shape), theta) + beta * EV)))
@@ -123,6 +123,8 @@ def get_value_function(theta, beta, x, trans_matrix):
         print(f"Num. iteratates: {niter}")
         print(f"Diff: {diff}")
         print("Convergence success: %s" %(diff < 1e-13))
+
+    return EV
 
 
 
