@@ -230,7 +230,7 @@ if [ "$stage" -eq 3 ]; then
     fi
 
     # Execute
-    python question_2.py 2> ./logs/question_2.errlog &
+    python question_3.py 2> ./logs/question_3.errlog &
     wait
     handle_error "Error" "$(pwd)/logs/question_3.errlog"
 
