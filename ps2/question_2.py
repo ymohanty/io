@@ -231,9 +231,10 @@ class Model:
 
 def hist_estimates(type='sim', interact='z'):
     """
+    Plot and save histograms of estimates of parameters via the GMM objective
 
-    :param type:
-    :param interact:
+    :param type: Denotes whether we allow the simulation path or the initial condition to vary. One of {'sim','init'}.
+    :param interact: . Denotes type of moment condition to use. One of {'none','z','zx'}
     """
     # Histogram of estimates based on different seed values but fixied initial guess
     est = []
