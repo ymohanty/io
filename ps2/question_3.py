@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 import data
+from util import flatten
+import copy
 
 
 # Function to make K x K transition matrix
@@ -94,29 +96,30 @@ def transition_matrix(x, k, d, replacement=True):
 def utility(x, d, theta):
     utility = np.zeros(x.shape)
     for i in range(np.size(x, 0)):
-        if d[i, 0] == 0:
-            utility[i, 0] = -theta[0] * x[i, 0] - theta[1] * (x[i, 0] / 100) ** 2
-        if d[i, 0] == 1:
-            utility[i, 0] = -theta[2]
+        if d[i] == 0:
+            utility[i] = -theta[0] * x[i] - theta[1] * (x[i] / 100) ** 2
+        if d[i] == 1:
+            utility[i] = -theta[2]
     return utility
 
 
 # Contraction map
 def contraction(EV, beta, x, theta, trans_matrix, noisy=True):
-    return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta) + beta * EV)
-                                          + np.exp(utility(x, np.ones(x.shape), theta) + beta * EV)))
-
+    return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta)[...,None] + beta * EV)
+                                          + np.exp(utility(x, np.ones(x.shape), theta)[...,None] + beta * EV)))
 
 def get_value_function(theta, beta, x, trans_matrix, noisy=True):
     diff = np.inf
     niter = 1
-    EV = np.zeros(20, 2)
+    EV = np.zeros((20, 2))
     while diff > 1e-13 and niter < 1000:
-        old_EV = EV
-        EV[:, 0] = contraction(old_EV, beta, x, theta, trans_matrix[:, :, 0])
-        EV[:, 1] = contraction(old_EV, beta, x, theta, trans_matrix[:, :, 1])
+        old_EV = copy.deepcopy(EV)
+        EV[:, 0] = contraction(EV, beta, x, theta, trans_matrix[:, :, 0])[:,0]
+        EV[:, 1] = contraction(EV, beta, x, theta, trans_matrix[:, :, 1])[:,1]
+        niter += 1
 
         diff = np.amax(np.abs(EV - old_EV))
+
 
     if noisy:
         print(f"Num. iteratates: {niter}")
@@ -128,7 +131,9 @@ def get_value_function(theta, beta, x, trans_matrix, noisy=True):
 
 def ccp(x, d, theta, beta, trans_matrix):
     x_pass = np.arange(0, 20)
-    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x.tolist(), d.tolist()]) / (
+    x = [int(i) for i in flatten(x.tolist())]
+    d = [int(i) for i in flatten(d.tolist())]
+    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x, d]) / (
         np.sum(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)), 1)))
 
 
@@ -146,6 +151,7 @@ def main():
     for i in range(np.size(data_array, 0) - 1):
         if data_array[i + 1, 0] < data_array[i, 0]:
             decision_array[i, 0] = 1
+    print(decision_array)
 
     # Make transition matrices
     trans_repair = transition_matrix(data_array, 20, decision_array, replacement=False)
@@ -164,11 +170,15 @@ def main():
 
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)
-    discrete_x = np.digitize(data_array, bins)
+    discrete_x = np.digitize(data_array, bins) - 1
+    print(np.max(discrete_x))
+    print(np.min(discrete_x))
 
     test = np.arange(1, 21)
     test_2 = np.reshape(test, (20, 1))
     # print(test_2)
+
+    print(log_likelihood(discrete_x, decision_array, [1, 2, 3], 0.4, trans_matrix))
 
 
 if __name__ == '__main__':
