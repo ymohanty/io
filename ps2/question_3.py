@@ -88,6 +88,11 @@ def utility(x, d, theta):
             utility[i, 0] = -theta[2]
     return utility
 
+# Function to compute right hand side of fixed point
+def ev_rhs(EV, beta, x, theta, trans_matrix):
+    return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta) + beta*EV)
+                                 + np.exp(utility(x, np.ones(x.shape), theta) + beta*EV)))
+
 def main():
     # Read in data and convert to arrays
     raw_data = pd.read_csv(data.DATA_LOC_3)
@@ -114,6 +119,11 @@ def main():
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)
     discrete_x = np.digitize(data_array, bins)
+
+    test = np.arange(1, 21)
+    test_2 = np.reshape(test, (20, 1))
+    #print(test_2)
+    print(ev_rhs(np.zeros((20, 1)), 0.999, test_2, [1, 2, 3], trans_replaced))
 
 if __name__ == '__main__':
     main()
