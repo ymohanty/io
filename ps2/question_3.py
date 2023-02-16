@@ -107,7 +107,7 @@ def contraction(EV, beta, x, theta, trans_matrix, noisy=True):
                                           + np.exp(utility(x, np.ones(x.shape), theta) + beta * EV)))
 
 
-def get_value_function(theta, beta, x, trans_matrix):
+def get_value_function(theta, beta, x, trans_matrix, noisy=True):
 
     diff = np.inf
     niter = 1
@@ -126,17 +126,12 @@ def get_value_function(theta, beta, x, trans_matrix):
 
     return EV
 
+def ccp(x, d, theta, beta, trans_matrix):
+    x_pass = np.arange(0, 20)
+    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x, d])/(np.sum(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)), 1)))
 
-
-
-
-
-
-
-
-
-
-
+def log_likelihood(x, d, theta, beta, trans_matrix):
+    return np.sum(d*ccp(x, d, theta, beta, trans_matrix) + (1-d)*ccp(x, d, theta, beta, trans_matrix), 0)
 
 def main():
     # Read in data and convert to arrays
@@ -161,6 +156,10 @@ def main():
     trans_replaced_df.to_latex(buf=data._OUT_PATH + '/trans_matrix_replaced.tex', caption='Transition Matrix for d=1',
                                label='tab:trans1', index=True, escape=False, float_format="%.1f")
 
+    # Combine transition matrix
+    trans_matrix = np.stack(trans_repair, trans_replaced)
+    print(trans_matrix.shape)
+
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)
     discrete_x = np.digitize(data_array, bins)
@@ -168,7 +167,8 @@ def main():
     test = np.arange(1, 21)
     test_2 = np.reshape(test, (20, 1))
     # print(test_2)
-    print(ev_rhs(np.zeros((20, 1)), 0.999, test_2, [1, 2, 3], trans_replaced))
+
+
 
 
 if __name__ == '__main__':
