@@ -3,6 +3,7 @@ import numpy as np
 import data
 from util import flatten
 import copy
+from scipy.optimize import minimize
 
 
 # Function to make K x K transition matrix
@@ -103,23 +104,23 @@ def utility(x, d, theta):
     return utility
 
 
-# Contraction map
+# Recursive map for the value function
 def contraction(EV, beta, x, theta, trans_matrix, noisy=True):
-    return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta)[...,None] + beta * EV)
-                                          + np.exp(utility(x, np.ones(x.shape), theta)[...,None] + beta * EV)))
+    return np.matmul(trans_matrix, np.log(np.exp(utility(x, np.zeros(x.shape), theta)[..., None] + beta * EV)
+                                          + np.exp(utility(x, np.ones(x.shape), theta)[..., None] + beta * EV)))
 
+# Solve for the value function by iterating on the contraction
 def get_value_function(theta, beta, x, trans_matrix, noisy=True):
     diff = np.inf
     niter = 1
     EV = np.zeros((20, 2))
     while diff > 1e-13 and niter < 1000:
         old_EV = copy.deepcopy(EV)
-        EV[:, 0] = contraction(EV, beta, x, theta, trans_matrix[:, :, 0])[:,0]
-        EV[:, 1] = contraction(EV, beta, x, theta, trans_matrix[:, :, 1])[:,1]
+        EV[:, 0] = contraction(EV, beta, x, theta, trans_matrix[:, :, 0])[:, 0]
+        EV[:, 1] = contraction(EV, beta, x, theta, trans_matrix[:, :, 1])[:, 1]
         niter += 1
 
         diff = np.amax(np.abs(EV - old_EV))
-
 
     if noisy:
         print(f"Num. iteratates: {niter}")
@@ -128,17 +129,37 @@ def get_value_function(theta, beta, x, trans_matrix, noisy=True):
 
     return EV
 
+# Conditional choice probabilities given state
+def choice_prob(x, d, theta, beta, trans_matrix):
 
-def ccp(x, d, theta, beta, trans_matrix):
-    x_pass = np.arange(0, 20)
-    x = [int(i) for i in flatten(x.tolist())]
-    d = [int(i) for i in flatten(d.tolist())]
-    return np.log(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)[x, d]) / (
-        np.sum(np.exp(get_value_function(theta, beta, x_pass, trans_matrix)), 1)))
+    # Data
+    x_t = [int(i) for i in flatten(x.tolist())]
+    d_t = [int(i) for i in flatten(d.tolist())]
 
+    # State and action spaces
+    X = np.arange(0,20)
 
+    # Compute conditional choice probabilities
+    v = get_value_function(theta,beta,X,trans_matrix)
+    numer = np.exp(v)
+    denom = np.sum(numer,axis=1, keepdims=1)
+    ccp = numer / denom
+
+    return np.log(ccp[x_t, d_t])
+
+# Return log likelihood
 def log_likelihood(x, d, theta, beta, trans_matrix):
-    return np.sum(d * ccp(x, d, theta, beta, trans_matrix) + (1 - d) * ccp(x, d, theta, beta, trans_matrix), 0)
+    ccp = choice_prob(x,d,theta,beta,trans_matrix)
+    return -np.sum(ccp, 0)
+
+# Estimate the model using MLE
+def estimate(x, d, beta, trans_matrix):
+
+    # Create objective
+    obj = lambda theta: log_likelihood(x, d, theta, beta, trans_matrix)
+    res = minimize(obj,[0.5, 0.5, 0.5])
+    print(res.x)
+
 
 
 def main():
@@ -151,7 +172,6 @@ def main():
     for i in range(np.size(data_array, 0) - 1):
         if data_array[i + 1, 0] < data_array[i, 0]:
             decision_array[i, 0] = 1
-    print(decision_array)
 
     # Make transition matrices
     trans_repair = transition_matrix(data_array, 20, decision_array, replacement=False)
@@ -171,14 +191,14 @@ def main():
     # Discretize x
     bins = np.linspace(0, np.amax(data_array), num=20)
     discrete_x = np.digitize(data_array, bins) - 1
-    print(np.max(discrete_x))
-    print(np.min(discrete_x))
+
 
     test = np.arange(1, 21)
     test_2 = np.reshape(test, (20, 1))
     # print(test_2)
 
-    print(log_likelihood(discrete_x, decision_array, [1, 2, 3], 0.4, trans_matrix))
+    # Estimate model
+    estimate(discrete_x, decision_array, 0.4, trans_matrix)
 
 
 if __name__ == '__main__':
