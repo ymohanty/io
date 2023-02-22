@@ -126,6 +126,9 @@ def get_value_function(theta, beta, x, trans_matrix, noisy=True):
         print(f"Num. iteratates: {niter}")
         print(f"Diff: {diff}")
         print("Convergence success: %s" % (diff < 1e-13))
+        if diff > 1e-13 or np.isnan(diff):
+            print("Convergence failed!")
+            exit(-1)
 
     return EV
 
@@ -198,7 +201,7 @@ def main():
     # print(test_2)
 
     # Estimate model
-    estimate(discrete_x, decision_array, 0.4, trans_matrix)
+    estimate(discrete_x, decision_array, 0.9, trans_matrix)
 
 
 if __name__ == '__main__':
