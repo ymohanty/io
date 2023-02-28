@@ -49,12 +49,20 @@ bidder_identity[ , ] <- ifelse(is.na(ebay_bids[ , ]), 0, 1)
 # Create number of bidders per auction
 num_bidders <- apply(bidder_identity, 1, sum)
 
-# Problem 2.3
+# Problem 2.4
 summary(num_bidders)
 sd(num_bidders)
 
-# Make new data set containing mean and var of bids
-mean_var <- data.frame(matrix(ncol = 2, nrow = 1000))
-names(mean_var) <- c('Mean', 'Var')
+# Make new data set containing mean and variance of mean
+mean_var <- data.frame(matrix(ncol = 5, nrow = 1000))
+names(mean_var) <- c('Mean', 'Var', 'tval', 'pval', 'Significant')
 mean_var[, 'Mean'] <- rowMeans(ebay_bids, na.rm = TRUE)
-mean_var[, 'Var'] <- rowVars(data.matrix(ebay_bids), na.rm = TRUE)
+mean_var[, 'Var'] <- rowVars(data.matrix(ebay_bids), na.rm = TRUE) / num_bidders[]
+
+# Calculate t-value and p-value for each auction (testing against null of 0)
+mean_var[, 'tval'] <- mean_var[, 'Mean'] / sqrt(mean_var[, 'Var'])
+mean_var[, 'pval'] <- 2*pt(-abs(mean_var[, 'tval']), df=num_bidders-1)
+
+# Find if it's significant at 5 percent level
+mean_var[, 'Significant'] <- ifelse(mean_var[, 'pval'] < 0.05, 1, 0)
+mean_var
