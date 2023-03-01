@@ -4,6 +4,26 @@ library(matrixStats)
 # From https://stackoverflow.com/questions/10296866/finding-the-column-number-and-value-the-of-second-highest-value-in-a-row
 maxn <- function(n) function(x) order(x, decreasing = TRUE)[n]
 
+# Function to compute (negative) likelihood for 2.6 (i)
+# params[1] is mu, params[2] is sd, sorted_dataframe is the sorted dataframe
+likelihood_12 <- function(params, sorted_dataframe) {
+  likelihood <- data.frame(matrix(ncol = 1, nrow = 1000))
+  likelihood[, 1] <- log(dnorm(sorted_dataframe[, 10], mean = params[1], sd = params[2])
+                         /(1 - pnorm(sorted_dataframe[, 9], mean = params[1], sd = params[2])))
+  return(-mean(likelihood[, 1]))
+}
+
+# Function to compute (negative) likelihood for 2.6 (ii)
+# params[1] is mu, params[2] is sd, sorted_dataframe is the sorted dataframe
+likelihood_13 <- function(params, sorted_dataframe) {
+  likelihood <- data.frame(matrix(ncol = 1, nrow = nrow(sorted_dataframe)))
+  likelihood[, 1] <- log((2*(pnorm(sorted_dataframe[, 10], mean = params[1], sd = params[2]) 
+                             - pnorm(sorted_dataframe[, 8], mean = params[1], sd = params[2]))
+                          *dnorm(sorted_dataframe[, 10], mean = params[1], sd = params[2]))
+                         /((1 - pnorm(sorted_dataframe[, 8], mean = params[1], sd = params[2]))^2))
+  return(-mean(likelihood[, 1]))
+}
+
 # Set random number generation for replication
 set.seed(29)
 
@@ -13,6 +33,7 @@ names(df) <- c(1:10)
 
 # Sort it in ascending order
 df_sorted <- t(apply(df, 1, sort))
+df_sorted
 
 # Problem 2.2
 mean(df_sorted[, 10])
@@ -65,4 +86,18 @@ mean_var[, 'pval'] <- 2*pt(-abs(mean_var[, 'tval']), df=num_bidders-1)
 
 # Find if it's significant at 5 percent level
 mean_var[, 'Significant'] <- ifelse(mean_var[, 'pval'] < 0.05, 1, 0)
-mean_var
+
+# Get first and second highest bids
+ebay_sorted <- ebay_bids
+ebay_sorted[is.na(ebay_sorted)] <- -100
+ebay_sorted <- t(apply(ebay_sorted, 1, sort))
+ebay_sorted <- as.data.frame(ebay_sorted)
+
+# Find the MLE estimates for 2.6 (i)
+optim(c(3, 5), likelihood_12, sorted_dataframe = ebay_sorted, method = 'Nelder-Mead')
+
+# Now for first-third highest we have to drop observations without 3 bidders
+ebay_sorted <- subset(ebay_sorted, V8 > -100)
+
+# Find the MLE estimates for 2.6 (ii)
+optim(c(3, 5), likelihood_13, sorted_dataframe = ebay_sorted, method = 'Nelder-Mead')
