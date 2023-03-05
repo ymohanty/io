@@ -84,8 +84,22 @@ mean_var[, 'Var'] <- rowVars(data.matrix(ebay_bids), na.rm = TRUE) / num_bidders
 mean_var[, 'tval'] <- mean_var[, 'Mean'] / sqrt(mean_var[, 'Var'])
 mean_var[, 'pval'] <- 2*pt(-abs(mean_var[, 'tval']), df=num_bidders-1)
 
-# Find if it's significant at 5 percent level
-mean_var[, 'Significant'] <- ifelse(mean_var[, 'pval'] < 0.05, 1, 0)
+# Find if it's significant at different levels
+mean_var[, 'Significant_1'] <- ifelse(mean_var[, 'pval'] < 0.01, 1, 0)
+mean_var[, 'Significant_5'] <- ifelse(mean_var[, 'pval'] < 0.05, 1, 0)
+mean_var[, 'Significant_10'] <- ifelse(mean_var[, 'pval'] < 0.10, 1, 0)
+
+# Problem 2.5
+mean(mean_var[, 'Significant_1'])
+mean(mean_var[, 'Significant_5'])
+mean(mean_var[, 'Significant_10'])
+
+# Make a vector of all bids and then test if the mean is equal to 0
+output <- unlist(ebay_bids, use.names = FALSE)
+tval <- mean(output, na.rm = TRUE) / sqrt(var(output, na.rm = TRUE) / sum(!is.na(output)))
+pval <- 2*pt(-abs(tval), df = sum(!is.na(output)) - 1)
+tval 
+pval
 
 # Get first and second highest bids
 ebay_sorted <- ebay_bids
