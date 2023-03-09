@@ -1,14 +1,11 @@
 import pandas as pd
 import numpy as np
-from scipy import sparse
-from scipy import stats
-from scipy.optimize import minimize
+from scipy import sparse, stats
+from scipy.optimize import minimize, fsolve
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn import preprocessing
-from sklearn import linear_model
-from sklearn import metrics
-from sklearn import neural_network
+from sklearn import preprocessing, linear_model, metrics, neural_network
+
 
 
 class BidModel:
@@ -119,7 +116,7 @@ class BidModel:
         elif method == 'lasso':
             print("Estimating gamma via lasso...")
             cv = 5
-            self.model = linear_model.LassoCV(cv=cv, verbose=True, fit_intercept=True).fit(X_scaled, y)
+            self.model = linear_model.LassoCV(cv=cv, verbose=False, fit_intercept=True).fit(X_scaled, y)
             yhat = self.model.predict(X_scaled)
             self.homog = y - yhat
             self.mse = metrics.mean_squared_error(y, yhat)
@@ -253,7 +250,36 @@ class BidModel:
 
 
     def plot_optimal_reserve(self):
-        pass
+
+        # Solve for optimal reserve
+        rstar = []
+        V = list(np.linspace(0,20,10))
+        for v0 in V:
+            G = lambda r: self.reserve_map(r, v0)
+            rstar.append(fsolve(G,x0=v0+0.5))
+
+        # Plot
+        plt.plot(V,rstar, color='red')
+        plt.plot(V,V,color='black',linestyle='--')
+        plt.xlabel("$v_0$")
+        plt.ylabel("$r^*$")
+        plt.savefig('figures/fig_optimal_reserve.pdf')
+        plt.close()
+
+
+
+
+
+
+
+    def reserve_map(self,r,v):
+
+        # Define distribution functions
+        f = lambda x: stats.norm.pdf(x,loc=self.params[0],scale=self.params[1])
+        F = lambda x: stats.norm.pdf(x,loc=self.params[0],scale=self.params[1])
+
+        # Return map
+        return r - (1-F(r))/f(r) - v
 
 
 if __name__ == '__main__':
@@ -275,10 +301,10 @@ if __name__ == '__main__':
     model.homogenize_bids('ols')
 
     # (b)
-    model.homogenize_bids('lasso')
+    #model.homogenize_bids('lasso')
 
     # (b)
-    model.homogenize_bids('mlp')
+    #model.homogenize_bids('mlp')
 
     # Part 7
     model.summarize_homogenized_bids()
@@ -286,3 +312,7 @@ if __name__ == '__main__':
     # Part 8
     model.estimate()
     model.plot_cdf()
+
+    # Part 9
+    model.plot_optimal_reserve()
+
